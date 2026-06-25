@@ -1,6 +1,6 @@
 {
   "name": "wesper",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The primitive that reads a WordPress site's world model — block registry, theme tokens, binding sources, fields, patterns, abilities — into one portable, provenanced context manifest for agents and Block Runner passes. CLI + library.",
   "type": "module",
   "license": "GPL-2.0-or-later",
@@ -24,7 +24,7 @@
   "homepage": "https://github.com/humanmade/wesper#readme",
   "bugs": "https://github.com/humanmade/wesper/issues",
   "bin": {
-    "wesper": "./dist/cli.js"
+    "wesper": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
