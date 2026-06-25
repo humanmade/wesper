@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { collectorSourceForTests } from './wpcli.js';
 import { collect } from '../index.js';
 
 let mockedOutput = wpOutput();
@@ -56,6 +57,31 @@ describe('WP-CLI collector', () => {
       provenance: { partial: true },
     });
   });
+
+  it('keeps collector post-data fields aligned with WordPress core bindings', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain("'name' => 'date', 'key' => 'date', 'source' => 'core/post-data'");
+    expect(source).toContain("'args' => array('field' => 'date')");
+    expect(source).toContain("'name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data'");
+    expect(source).toContain("'args' => array('field' => 'modified')");
+    expect(source).toContain("'name' => 'link', 'key' => 'link', 'source' => 'core/post-data'");
+    expect(source).toContain("'args' => array('field' => 'link')");
+    expect(source).toContain("'source' => 'core/post-meta'");
+    expect(source).toContain("'args' => array('key' => (string) $meta_key)");
+    expect(source).not.toContain("array('key' => 'title', 'source' => 'core/post-data'");
+    expect(source).not.toContain("array('key' => 'excerpt', 'source' => 'core/post-data'");
+    expect(source).not.toContain("array('key' => 'featured_media', 'source' => 'core/post-data'");
+  });
+
+  it('only warns about missing registered meta on public REST post types', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain(
+      "if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0)",
+    );
+    expect(source).toContain('$rest_visible_meta_count++;');
+  });
 });
 
 function wpOutput(): Record<string, unknown> {
@@ -91,7 +117,16 @@ function wpOutput(): Record<string, unknown> {
           public: true,
           showInRest: true,
           taxonomies: ['category'],
-          fields: [{ key: 'title', source: 'core/post-data', type: 'string', bindable: true }],
+          fields: [
+            {
+              name: 'date',
+              key: 'date',
+              source: 'core/post-data',
+              args: { field: 'date' },
+              type: 'string',
+              bindable: true,
+            },
+          ],
         },
       ],
     },

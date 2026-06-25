@@ -46,8 +46,10 @@ export const bindingSourceSchema = z
 
 export const bindingFieldSchema = z
   .object({
-    key: z.string().min(1),
+    name: z.string().min(1),
+    key: z.string().min(1).optional(),
     source: z.string().min(1),
+    args: z.record(z.string(), jsonValueSchema),
     type: z.string().optional(),
     single: z.boolean().optional(),
     showInRest: z.boolean().optional(),

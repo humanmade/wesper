@@ -44,9 +44,8 @@ consumer can share — instead of each agent re-deriving brittle introspection o
 - **A transport ladder, not one method.** Collect via WP-CLI (local/SSH), authenticated
   REST/Abilities/MCP (no-shell hosts), or a hand-authored fixture (tests/CI). The schema is
   independent of how it was gathered.
-- **Binding-ready.** Surfaces registered Block Bindings sources, their argument schemas, and
-  the fields/meta keys reachable per post type — the slice the binding pass cannot function
-  without.
+- **Binding-ready.** Surfaces registered Block Bindings sources and per-post-type fields with
+  ready-to-use binding `args`, so consumers do not need source-specific argument logic.
 - **Provenance + freshness.** Every manifest is stamped (`collectedAt`, collector, source
   hash, TTL) so consumers can detect stale context and diff it in CI.
 - **Honest about gaps.** A thin manifest is allowed, but it must say *where* it is thin.

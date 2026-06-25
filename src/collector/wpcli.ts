@@ -134,7 +134,9 @@ function array(value: unknown): Array<Record<string, unknown>> {
 }
 
 function sortByName(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  return [...items].sort((left, right) => String(left.name ?? '').localeCompare(String(right.name ?? '')));
+  return [...items].sort((left, right) =>
+    String(left.name ?? left.key ?? '').localeCompare(String(right.name ?? right.key ?? '')),
+  );
 }
 
 function sortPostTypes(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
@@ -262,10 +264,11 @@ if (function_exists('get_block_bindings_supported_attributes')) {
 
 $post_types = array();
 foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_object) {
+    $rest_visible_meta_count = 0;
     $fields = array(
-        array('key' => 'title', 'source' => 'core/post-data', 'type' => 'string', 'bindable' => true),
-        array('key' => 'excerpt', 'source' => 'core/post-data', 'type' => 'string', 'bindable' => true),
-        array('key' => 'featured_media', 'source' => 'core/post-data', 'type' => 'integer', 'bindable' => true),
+        array('name' => 'date', 'key' => 'date', 'source' => 'core/post-data', 'args' => array('field' => 'date'), 'type' => 'string', 'bindable' => true),
+        array('name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data', 'args' => array('field' => 'modified'), 'type' => 'string', 'bindable' => true),
+        array('name' => 'link', 'key' => 'link', 'source' => 'core/post-data', 'args' => array('field' => 'link'), 'type' => 'string', 'bindable' => true),
     );
     $registered_meta = function_exists('get_registered_meta_keys') ? get_registered_meta_keys('post', $post_type_name) : array();
     foreach ($registered_meta as $meta_key => $args) {
@@ -274,16 +277,19 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
         if (!$show_in_rest || $protected) {
             continue;
         }
+        $rest_visible_meta_count++;
         $fields[] = array(
+            'name' => (string) $meta_key,
             'key' => (string) $meta_key,
             'source' => 'core/post-meta',
+            'args' => array('key' => (string) $meta_key),
             'type' => isset($args['type']) ? (string) $args['type'] : 'string',
             'single' => isset($args['single']) ? (bool) $args['single'] : false,
             'showInRest' => true,
             'bindable' => true,
         );
     }
-    if (empty($registered_meta)) {
+    if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
         $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info');
     }
     $post_types[] = array(

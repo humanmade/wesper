@@ -362,6 +362,10 @@
                     "items": {
                       "type": "object",
                       "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
                         "key": {
                           "type": "string",
                           "minLength": 1
@@ -369,6 +373,12 @@
                         "source": {
                           "type": "string",
                           "minLength": 1
+                        },
+                        "args": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                          }
                         },
                         "type": {
                           "type": "string"
@@ -385,8 +395,9 @@
                         }
                       },
                       "required": [
-                        "key",
-                        "source"
+                        "name",
+                        "source",
+                        "args"
                       ],
                       "additionalProperties": true
                     },
