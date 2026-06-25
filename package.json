@@ -1,0 +1,65 @@
+{
+  "name": "wesper",
+  "version": "0.0.1",
+  "description": "The primitive that reads a WordPress site's world model — block registry, theme tokens, binding sources, fields, patterns, abilities — into one portable, provenanced context manifest for agents and Block Runner passes. CLI + library.",
+  "type": "module",
+  "license": "GPL-2.0-or-later",
+  "keywords": [
+    "wordpress",
+    "gutenberg",
+    "block-editor",
+    "block-bindings",
+    "theme-json",
+    "site-context",
+    "introspection",
+    "wp-cli",
+    "mcp",
+    "ai",
+    "agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/humanmade/wesper.git"
+  },
+  "homepage": "https://github.com/humanmade/wesper#readme",
+  "bugs": "https://github.com/humanmade/wesper/issues",
+  "bin": {
+    "wesper": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.12.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "dev": "tsx src/cli.ts",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "commander": "12.1.0",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsup": "8.3.5",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}

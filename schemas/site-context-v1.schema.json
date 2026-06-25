@@ -1,0 +1,465 @@
+{
+  "$ref": "#/definitions/WesperSiteContextV1",
+  "definitions": {
+    "WesperSiteContextV1": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "format": "uri",
+          "default": "https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json"
+        },
+        "contextVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "site": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "environment": {
+              "type": "string",
+              "enum": [
+                "local",
+                "staging",
+                "production",
+                "unknown"
+              ],
+              "default": "unknown"
+            },
+            "isMultisite": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": true
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "collectedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "collector": {
+              "type": "string",
+              "enum": [
+                "wp-cli",
+                "fixture"
+              ]
+            },
+            "collectorVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sourceHash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "partial": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "collectedAt",
+            "collector",
+            "collectorVersion",
+            "sourceHash"
+          ],
+          "additionalProperties": true
+        },
+        "wordpress": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "locale": {
+              "type": "string"
+            },
+            "permalinkStructure": {
+              "type": "string"
+            },
+            "features": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "default": {}
+            }
+          },
+          "additionalProperties": true
+        },
+        "theme": {
+          "type": "object",
+          "properties": {
+            "stylesheet": {
+              "type": "string"
+            },
+            "template": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "isBlockTheme": {
+              "type": "boolean"
+            },
+            "themeJsonHash": {
+              "type": "string"
+            },
+            "settingsOrigin": {
+              "type": "string",
+              "enum": [
+                "merged",
+                "theme"
+              ],
+              "default": "merged"
+            },
+            "tokens": {
+              "type": "object",
+              "properties": {
+                "colors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "slug": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "slug",
+                      "value"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "default": []
+                },
+                "spacing": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/tokens/properties/colors/items"
+                  },
+                  "default": []
+                },
+                "typography": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/tokens/properties/colors/items"
+                  },
+                  "default": []
+                }
+              },
+              "additionalProperties": false,
+              "default": {
+                "colors": [],
+                "spacing": [],
+                "typography": []
+              }
+            },
+            "settings": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                  }
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+            }
+          },
+          "default": []
+        },
+        "blocks": {
+          "type": "object",
+          "properties": {
+            "types": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                }
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": true
+        },
+        "bindings": {
+          "type": "object",
+          "properties": {
+            "available": {
+              "type": "boolean",
+              "default": false
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "usesContext": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "argsSchema": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": true
+              },
+              "default": []
+            },
+            "supportedAttributes": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "default": {}
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "warning",
+                      "error"
+                    ]
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "surface": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "code",
+                  "severity",
+                  "message",
+                  "surface"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": true
+        },
+        "contentModel": {
+          "type": "object",
+          "properties": {
+            "postTypes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "public": {
+                    "type": "boolean"
+                  },
+                  "showInRest": {
+                    "type": "boolean"
+                  },
+                  "taxonomies": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "single": {
+                          "type": "boolean"
+                        },
+                        "showInRest": {
+                          "type": "boolean"
+                        },
+                        "bindable": {
+                          "type": "boolean",
+                          "default": true
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "source"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "default": []
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": true
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": true
+        },
+        "patterns": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                }
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": true
+        },
+        "media": {
+          "type": "object",
+          "properties": {
+            "imageSizes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+                }
+              },
+              "default": []
+            },
+            "maxUploadSize": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/WesperSiteContextV1/properties/bindings/properties/warnings/items"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "contextVersion",
+        "site",
+        "provenance",
+        "wordpress",
+        "theme",
+        "blocks",
+        "bindings",
+        "contentModel",
+        "patterns",
+        "media"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

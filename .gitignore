@@ -1,0 +1,22 @@
+# Internal knowledge base — research + design substrate, never shipped.
+# The public repo must read clean.
+md/
+
+# Internal agent context — private.
+AGENTS.md
+CLAUDE.md
+.clawpatch/
+
+# Node
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.env
+.env.*
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
