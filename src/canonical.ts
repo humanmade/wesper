@@ -36,7 +36,8 @@ function sortJson(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      // RFC 8785/JCS orders object member names by Unicode code point, not locale collation.
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, nested]) => [key, sortJson(nested)]),
   );
 }

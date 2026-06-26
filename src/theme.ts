@@ -80,5 +80,5 @@ function presetEntries<T>(collection: PresetCollection<T> | undefined): T[] {
 }
 
 function bySlug(left: { slug: string }, right: { slug: string }): number {
-  return left.slug.localeCompare(right.slug);
+  return left.slug < right.slug ? -1 : left.slug > right.slug ? 1 : 0;
 }

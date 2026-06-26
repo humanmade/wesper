@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type * as z from 'zod/v4';
 import type {
   bindingFieldSchema,
   bindingSourceSchema,
@@ -12,7 +12,7 @@ export const CONTEXT_VERSION = 1 as const;
 export const SCHEMA_URL = 'https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json' as const;
 
 export type CollectorKind = 'wp-cli' | 'fixture';
-export type Environment = 'local' | 'staging' | 'production' | 'unknown';
+export type Environment = 'local' | 'development' | 'staging' | 'production' | 'unknown';
 export type WarningSeverity = 'info' | 'warning' | 'error';
 
 export type ContextWarning = z.infer<typeof contextWarningSchema>;

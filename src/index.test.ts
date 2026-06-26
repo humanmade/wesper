@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { sourceHash } from './canonical.js';
+import { readFileSync } from 'node:fs';
+import { canonicalize, sourceHash } from './canonical.js';
 import { redactSecrets } from './redact.js';
+import { siteContextJsonSchema } from './schema.js';
 import { parseThemeJsonSettings } from './theme.js';
 import { SCHEMA_URL, type SiteContext } from './types.js';
-import { summarize, validate } from './index.js';
+import { formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
 
 describe('validation', () => {
   it('accepts the canonical V1 shape and preserves unknown top-level keys', () => {
@@ -48,9 +50,103 @@ describe('validation', () => {
       },
     ]);
   });
+
+  it('accepts a minimal manifest with only required contract surfaces', () => {
+    const result = validate({
+      contextVersion: 1,
+      site: {},
+      provenance: {
+        collectedAt: '2026-06-25T00:00:00.000Z',
+        collector: 'fixture',
+        collectorVersion: '0.1.0',
+        sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      },
+      warnings: [],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.context?.$schema).toBe(SCHEMA_URL);
+  });
+
+  it('exports an input JSON Schema with only raw input requirements', () => {
+    expect((siteContextJsonSchema as { required?: string[] }).required).toEqual([
+      'contextVersion',
+      'site',
+      'provenance',
+      'warnings',
+    ]);
+  });
+
+  it('accepts WordPress development environment manifests', () => {
+    const result = validate(fixture({ site: { environment: 'development' } }));
+
+    expect(result.ok).toBe(true);
+    expect(result.context?.site.environment).toBe('development');
+  });
+
+  it('treats an omitted section with a matching warning as absent, not empty', () => {
+    const manifest = fixture({
+      warnings: [
+        {
+          code: 'patterns.unavailable',
+          severity: 'warning',
+          surface: 'patterns',
+          message: 'Patterns could not be collected.',
+        },
+      ],
+    });
+    delete manifest.patterns;
+
+    const result = validate(manifest);
+
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toEqual([
+      {
+        code: 'patterns.unavailable',
+        severity: 'warning',
+        surface: 'patterns',
+        message: 'Patterns could not be collected.',
+      },
+    ]);
+    expect(result.context?.patterns).toBeUndefined();
+  });
+
+  it('warns when a content section is omitted without a matching warning', () => {
+    const manifest = fixture();
+    delete manifest.patterns;
+
+    const result = validate(manifest);
+
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toContainEqual({
+      code: 'absent_without_warning',
+      severity: 'warning',
+      surface: 'patterns',
+      message: 'Manifest section "patterns" is absent without a matching warning.',
+    });
+  });
 });
 
 describe('sourceHash and redaction', () => {
+  it('canonicalizes object keys by RFC 8785 code-unit order regardless of process locale', () => {
+    const originalLang = process.env.LANG;
+    const value = { Z: true, a: true, _internal: true, '40': true };
+
+    try {
+      const expected = '{"40":true,"Z":true,"_internal":true,"a":true}';
+      process.env.LANG = 'sv_SE.UTF-8';
+      expect(canonicalize(value)).toBe(expected);
+
+      const firstHash = sourceHash(value);
+      process.env.LANG = 'tr_TR.UTF-8';
+      expect(canonicalize(value)).toBe(expected);
+      expect(sourceHash(value)).toBe(firstHash);
+    } finally {
+      process.env.LANG = originalLang;
+    }
+  });
+
   it('excludes collectedAt and sourceHash from the hash', () => {
     const first = fixture({
       provenance: {
@@ -119,6 +215,57 @@ describe('summary', () => {
       warnings: 0,
     });
     expect(summary.bindingReadiness.fieldsByPostType).toEqual({ post: 2 });
+  });
+
+  it('reports present-empty sections as zero', () => {
+    const manifest = validate(fixture({ patterns: { items: [] } })).context;
+    expect(manifest).toBeDefined();
+
+    const summary = summarize(manifest as SiteContext);
+
+    expect(summary.counts.patterns).toBe(0);
+  });
+
+  it('reports absent sections distinctly in markdown', () => {
+    const manifest = fixture({
+      warnings: [
+        {
+          code: 'patterns.unavailable',
+          severity: 'warning',
+          surface: 'patterns',
+          message: 'Patterns could not be collected.',
+        },
+      ],
+    });
+    delete manifest.patterns;
+    const context = validate(manifest).context;
+    expect(context).toBeDefined();
+
+    expect(formatSummaryMarkdown(context as SiteContext)).toContain('- Patterns: absent (see warnings)');
+  });
+});
+
+describe('manifest serialization', () => {
+  it('emits $schema and contextVersion first without changing sourceHash semantics', () => {
+    const context = validate(fixture()).context as SiteContext;
+    const serialized = stringifyManifest(context);
+
+    expect(serialized.startsWith('{\n  "$schema"')).toBe(true);
+    expect(serialized.split('\n')[2]).toContain('"contextVersion"');
+    expect(sourceHash(JSON.parse(serialized))).toBe(sourceHash(context));
+  });
+});
+
+describe('package metadata', () => {
+  it('does not advertise deferred V1.1 surfaces as shipped V1 features', () => {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      description: string;
+      keywords: string[];
+    };
+    const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+    const publicMetadata = `${packageJson.description} ${packageJson.keywords.join(' ')} ${readme}`;
+
+    expect(publicMetadata).not.toMatch(/\b(?:abilities|mcp|acf|rest|diff|freshness|ttl)\b/i);
   });
 });
 

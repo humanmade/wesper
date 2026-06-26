@@ -1,5 +1,4 @@
-import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import * as z from 'zod/v4';
 import { CONTEXT_VERSION, SCHEMA_URL } from './types.js';
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
@@ -65,7 +64,7 @@ export const siteContextSchema = z
       .object({
         url: z.string().optional(),
         name: z.string().optional(),
-        environment: z.enum(['local', 'staging', 'production', 'unknown']).default('unknown'),
+        environment: z.enum(['local', 'development', 'staging', 'production', 'unknown']).default('unknown'),
         isMultisite: z.boolean().default(false),
       })
       .passthrough(),
@@ -85,7 +84,8 @@ export const siteContextSchema = z
         permalinkStructure: z.string().optional(),
         features: z.record(z.string(), z.boolean()).default({}),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
     theme: z
       .object({
         stylesheet: z.string().optional(),
@@ -104,13 +104,15 @@ export const siteContextSchema = z
           .default({ colors: [], spacing: [], typography: [] }),
         settings: jsonValueSchema.optional(),
       })
-      .passthrough(),
-    plugins: z.array(z.record(z.string(), jsonValueSchema)).default([]),
+      .passthrough()
+      .optional(),
+    plugins: z.array(z.record(z.string(), jsonValueSchema)).optional(),
     blocks: z
       .object({
         types: z.array(z.record(z.string(), jsonValueSchema)).default([]),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
     bindings: z
       .object({
         available: z.boolean().default(false),
@@ -118,7 +120,8 @@ export const siteContextSchema = z
         supportedAttributes: z.record(z.string(), z.array(z.string())).default({}),
         warnings: z.array(contextWarningSchema).default([]),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
     contentModel: z
       .object({
         postTypes: z
@@ -136,21 +139,26 @@ export const siteContextSchema = z
           )
           .default([]),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
     patterns: z
       .object({
         items: z.array(z.record(z.string(), jsonValueSchema)).default([]),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
     media: z
       .object({
         imageSizes: z.array(z.record(z.string(), jsonValueSchema)).default([]),
         maxUploadSize: z.number().optional(),
       })
-      .passthrough(),
-    warnings: z.array(contextWarningSchema).default([]),
+      .passthrough()
+      .optional(),
+    warnings: z.array(contextWarningSchema),
   })
   .passthrough();
+
+const summaryCountSchema = z.union([z.number(), z.literal('absent')]);
 
 export const summarySchema = z.object({
   site: z.object({
@@ -162,13 +170,13 @@ export const summarySchema = z.object({
     sourceHash: z.string(),
   }),
   counts: z.object({
-    blockTypes: z.number(),
-    bindingSources: z.number(),
-    postTypes: z.number(),
-    bindableFields: z.number(),
-    patterns: z.number(),
-    plugins: z.number(),
-    imageSizes: z.number(),
+    blockTypes: summaryCountSchema,
+    bindingSources: summaryCountSchema,
+    postTypes: summaryCountSchema,
+    bindableFields: summaryCountSchema,
+    patterns: summaryCountSchema,
+    plugins: summaryCountSchema,
+    imageSizes: summaryCountSchema,
     warnings: z.number(),
   }),
   bindingReadiness: z.object({
@@ -178,8 +186,7 @@ export const summarySchema = z.object({
   warningsBySurface: z.record(z.string(), z.array(contextWarningSchema)),
 });
 
-export const siteContextJsonSchema = zodToJsonSchema(siteContextSchema, {
-  name: 'WesperSiteContextV1',
-  $refStrategy: 'root',
-  target: 'jsonSchema7',
-});
+export const siteContextJsonSchema = {
+  $id: 'WesperSiteContextV1',
+  ...z.toJSONSchema(siteContextSchema, { target: 'draft-7', reused: 'ref', io: 'input' }),
+};

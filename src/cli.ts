@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
-import { collect, formatSummaryMarkdown, summarize, validate } from './index.js';
+import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
 import { allWarnings, hasActionableWarnings } from './warnings.js';
 
 const program = new Command();
@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name('wesper')
   .description('Read a WordPress site into a portable context manifest for agents and Block Runner passes.')
-  .version('0.0.1');
+  .version('0.0.2');
 
 program
   .command('collect')
@@ -28,7 +28,7 @@ program
         ssh: options.ssh,
         strict: options.strict,
       });
-      await writeOutput(JSON.stringify(context, null, 2), options.out);
+      await writeOutput(stringifyManifest(context), options.out);
       process.exitCode = options.strict && hasActionableWarnings(allWarnings(context)) ? 1 : 0;
     } catch (error) {
       console.error(`wesper collect: ${message(error)}`);

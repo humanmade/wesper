@@ -52,12 +52,12 @@ function parseCollectorJson(stdout: string): Record<string, unknown> {
 
 function normalizeCollectorOutput(raw: Record<string, unknown>): SiteContext {
   const warnings = warningArray(raw.warnings);
-  const bindingsRaw = record(raw.bindings);
-  const themeRaw = record(raw.theme);
-  const settings = themeRaw.settings;
-  warnings.push(...themeWarnings(settings));
+  if (hasOwn(raw, 'theme')) {
+    const settings = record(raw.theme).settings;
+    warnings.push(...themeWarnings(settings));
+  }
 
-  const contextWithoutHash = redactSecrets({
+  const collected: Record<string, unknown> = {
     $schema: SCHEMA_URL,
     contextVersion: CONTEXT_VERSION,
     site: record(raw.site),
@@ -68,33 +68,53 @@ function normalizeCollectorOutput(raw: Record<string, unknown>): SiteContext {
       sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
       partial: warnings.some((warning) => warning.severity !== 'info'),
     },
-    wordpress: record(raw.wordpress),
-    theme: {
+    warnings,
+  };
+  if (hasOwn(raw, 'wordpress')) {
+    collected.wordpress = record(raw.wordpress);
+  }
+  if (hasOwn(raw, 'theme')) {
+    const themeRaw = record(raw.theme);
+    const settings = themeRaw.settings;
+    collected.theme = {
       ...themeRaw,
       settingsOrigin: 'merged',
       themeJsonHash: settings ? sourceHash({ settings }) : undefined,
       tokens: parseThemeJsonSettings(settings),
       settings,
-    },
-    plugins: array(raw.plugins),
-    blocks: {
+    };
+  }
+  if (hasOwn(raw, 'plugins')) {
+    collected.plugins = array(raw.plugins);
+  }
+  if (hasOwn(raw, 'blocks')) {
+    collected.blocks = {
       types: sortByName(array(record(raw.blocks).types)),
-    },
-    bindings: {
+    };
+  }
+  if (hasOwn(raw, 'bindings')) {
+    const bindingsRaw = record(raw.bindings);
+    collected.bindings = {
       available: Boolean(bindingsRaw.available),
       sources: sortByName(array(bindingsRaw.sources)),
       supportedAttributes: sortSupportedAttributes(record(bindingsRaw.supportedAttributes)),
       warnings: warningArray(bindingsRaw.warnings),
-    },
-    contentModel: {
+    };
+  }
+  if (hasOwn(raw, 'contentModel')) {
+    collected.contentModel = {
       postTypes: sortPostTypes(array(record(raw.contentModel).postTypes)),
-    },
-    patterns: {
+    };
+  }
+  if (hasOwn(raw, 'patterns')) {
+    collected.patterns = {
       items: sortByName(array(record(raw.patterns).items)),
-    },
-    media: record(raw.media),
-    warnings,
-  });
+    };
+  }
+  if (hasOwn(raw, 'media')) {
+    collected.media = record(raw.media);
+  }
+  const contextWithoutHash = redactSecrets(collected);
 
   const context = {
     ...contextWithoutHash,
@@ -127,6 +147,10 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 function array(value: unknown): Array<Record<string, unknown>> {
   return Array.isArray(value)
     ? (value.filter((item) => item && typeof item === 'object') as Array<Record<string, unknown>>)
@@ -135,7 +159,7 @@ function array(value: unknown): Array<Record<string, unknown>> {
 
 function sortByName(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return [...items].sort((left, right) =>
-    String(left.name ?? left.key ?? '').localeCompare(String(right.name ?? right.key ?? '')),
+    compareStrings(String(left.name ?? left.key ?? ''), String(right.name ?? right.key ?? '')),
   );
 }
 
@@ -143,19 +167,23 @@ function sortPostTypes(items: Array<Record<string, unknown>>): Array<Record<stri
   return sortByName(items).map((postType) => ({
     ...postType,
     fields: sortByName(array(postType.fields)),
-    taxonomies: Array.isArray(postType.taxonomies) ? [...postType.taxonomies].sort() : [],
+    taxonomies: Array.isArray(postType.taxonomies) ? postType.taxonomies.map(String).sort(compareStrings) : [],
   }));
 }
 
 function sortSupportedAttributes(value: Record<string, unknown>): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStrings(left, right))
       .map(([blockName, attributes]) => [
         blockName,
-        Array.isArray(attributes) ? attributes.map(String).sort() : [],
+        Array.isArray(attributes) ? attributes.map(String).sort(compareStrings) : [],
       ]),
   );
+}
+
+function compareStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 export function collectorSourceForTests(): string {

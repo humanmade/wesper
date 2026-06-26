@@ -1,476 +1,507 @@
 {
-  "$ref": "#/definitions/WesperSiteContextV1",
-  "definitions": {
-    "WesperSiteContextV1": {
+  "$id": "WesperSiteContextV1",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "default": "https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json",
+      "type": "string",
+      "format": "uri"
+    },
+    "contextVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "site": {
       "type": "object",
       "properties": {
-        "$schema": {
+        "url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "environment": {
+          "default": "unknown",
           "type": "string",
-          "format": "uri",
-          "default": "https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json"
+          "enum": [
+            "local",
+            "development",
+            "staging",
+            "production",
+            "unknown"
+          ]
         },
-        "contextVersion": {
-          "type": "number",
-          "const": 1
+        "isMultisite": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "collectedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
         },
-        "site": {
+        "collector": {
+          "type": "string",
+          "enum": [
+            "wp-cli",
+            "fixture"
+          ]
+        },
+        "collectorVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "partial": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "collectedAt",
+        "collector",
+        "collectorVersion",
+        "sourceHash"
+      ],
+      "additionalProperties": {}
+    },
+    "wordpress": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "locale": {
+          "type": "string"
+        },
+        "permalinkStructure": {
+          "type": "string"
+        },
+        "features": {
+          "default": {},
           "type": "object",
-          "properties": {
-            "url": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "environment": {
-              "type": "string",
-              "enum": [
-                "local",
-                "staging",
-                "production",
-                "unknown"
-              ],
-              "default": "unknown"
-            },
-            "isMultisite": {
-              "type": "boolean",
-              "default": false
-            }
+          "propertyNames": {
+            "type": "string"
           },
-          "additionalProperties": true
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "stylesheet": {
+          "type": "string"
         },
-        "provenance": {
-          "type": "object",
-          "properties": {
-            "collectedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "collector": {
-              "type": "string",
-              "enum": [
-                "wp-cli",
-                "fixture"
-              ]
-            },
-            "collectorVersion": {
-              "type": "string",
-              "minLength": 1
-            },
-            "sourceHash": {
-              "type": "string",
-              "pattern": "^sha256:[a-f0-9]{64}$"
-            },
-            "partial": {
-              "type": "boolean",
-              "default": false
-            }
+        "template": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "isBlockTheme": {
+          "type": "boolean"
+        },
+        "themeJsonHash": {
+          "type": "string"
+        },
+        "settingsOrigin": {
+          "default": "merged",
+          "type": "string",
+          "enum": [
+            "merged",
+            "theme"
+          ]
+        },
+        "tokens": {
+          "default": {
+            "colors": [],
+            "spacing": [],
+            "typography": []
           },
-          "required": [
-            "collectedAt",
-            "collector",
-            "collectorVersion",
-            "sourceHash"
-          ],
-          "additionalProperties": true
-        },
-        "wordpress": {
           "type": "object",
           "properties": {
-            "version": {
-              "type": "string"
-            },
-            "locale": {
-              "type": "string"
-            },
-            "permalinkStructure": {
-              "type": "string"
-            },
-            "features": {
-              "type": "object",
-              "additionalProperties": {
-                "type": "boolean"
-              },
-              "default": {}
-            }
-          },
-          "additionalProperties": true
-        },
-        "theme": {
-          "type": "object",
-          "properties": {
-            "stylesheet": {
-              "type": "string"
-            },
-            "template": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "version": {
-              "type": "string"
-            },
-            "isBlockTheme": {
-              "type": "boolean"
-            },
-            "themeJsonHash": {
-              "type": "string"
-            },
-            "settingsOrigin": {
-              "type": "string",
-              "enum": [
-                "merged",
-                "theme"
-              ],
-              "default": "merged"
-            },
-            "tokens": {
-              "type": "object",
-              "properties": {
-                "colors": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "slug": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "value": {
-                        "type": "string",
-                        "minLength": 1
-                      }
-                    },
-                    "required": [
-                      "slug",
-                      "value"
-                    ],
-                    "additionalProperties": true
-                  },
-                  "default": []
-                },
-                "spacing": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/tokens/properties/colors/items"
-                  },
-                  "default": []
-                },
-                "typography": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/tokens/properties/colors/items"
-                  },
-                  "default": []
-                }
-              },
-              "additionalProperties": false,
-              "default": {
-                "colors": [],
-                "spacing": [],
-                "typography": []
+            "colors": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/__schema0"
               }
             },
-            "settings": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                  }
-                },
-                {
-                  "type": "object",
-                  "additionalProperties": {
-                    "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                  }
-                }
-              ]
+            "spacing": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/__schema0"
+              }
+            },
+            "typography": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/__schema0"
+              }
             }
-          },
-          "additionalProperties": true
+          }
         },
-        "plugins": {
+        "settings": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema1"
+            }
+          ]
+        }
+      },
+      "additionalProperties": {}
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {
+          "$ref": "#/definitions/__schema1"
+        }
+      }
+    },
+    "blocks": {
+      "type": "object",
+      "properties": {
+        "types": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
             "additionalProperties": {
-              "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
+              "$ref": "#/definitions/__schema1"
             }
-          },
-          "default": []
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "bindings": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "default": false,
+          "type": "boolean"
         },
-        "blocks": {
-          "type": "object",
-          "properties": {
-            "types": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                }
+        "sources": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
               },
-              "default": []
-            }
-          },
-          "additionalProperties": true
-        },
-        "bindings": {
-          "type": "object",
-          "properties": {
-            "available": {
-              "type": "boolean",
-              "default": false
-            },
-            "sources": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string"
                   },
-                  "label": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "usesContext": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "default": []
-                  },
-                  "argsSchema": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null
+                  {
+                    "type": "null"
                   }
-                },
-                "required": [
-                  "name"
-                ],
-                "additionalProperties": true
+                ]
               },
-              "default": []
-            },
-            "supportedAttributes": {
-              "type": "object",
-              "additionalProperties": {
+              "usesContext": {
+                "default": [],
                 "type": "array",
                 "items": {
                   "type": "string"
                 }
               },
-              "default": {}
+              "argsSchema": {
+                "default": null,
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/__schema1"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
             },
-            "warnings": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "code": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "severity": {
-                    "type": "string",
-                    "enum": [
-                      "info",
-                      "warning",
-                      "error"
-                    ]
-                  },
-                  "message": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "surface": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "code",
-                  "severity",
-                  "message",
-                  "surface"
-                ],
-                "additionalProperties": false
-              },
-              "default": []
-            }
-          },
-          "additionalProperties": true
+            "required": [
+              "name"
+            ],
+            "additionalProperties": {}
+          }
         },
-        "contentModel": {
+        "supportedAttributes": {
+          "default": {},
           "type": "object",
-          "properties": {
-            "postTypes": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "label": {
-                    "type": "string"
-                  },
-                  "public": {
-                    "type": "boolean"
-                  },
-                  "showInRest": {
-                    "type": "boolean"
-                  },
-                  "taxonomies": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "default": []
-                  },
-                  "fields": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "key": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "source": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "args": {
-                          "type": "object",
-                          "additionalProperties": {
-                            "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                          }
-                        },
-                        "type": {
-                          "type": "string"
-                        },
-                        "single": {
-                          "type": "boolean"
-                        },
-                        "showInRest": {
-                          "type": "boolean"
-                        },
-                        "bindable": {
-                          "type": "boolean",
-                          "default": true
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "source",
-                        "args"
-                      ],
-                      "additionalProperties": true
-                    },
-                    "default": []
-                  }
-                },
-                "required": [
-                  "name"
-                ],
-                "additionalProperties": true
-              },
-              "default": []
-            }
+          "propertyNames": {
+            "type": "string"
           },
-          "additionalProperties": true
-        },
-        "patterns": {
-          "type": "object",
-          "properties": {
+          "additionalProperties": {
+            "type": "array",
             "items": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                }
-              },
-              "default": []
+              "type": "string"
             }
-          },
-          "additionalProperties": true
-        },
-        "media": {
-          "type": "object",
-          "properties": {
-            "imageSizes": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/definitions/WesperSiteContextV1/properties/theme/properties/settings"
-                }
-              },
-              "default": []
-            },
-            "maxUploadSize": {
-              "type": "number"
-            }
-          },
-          "additionalProperties": true
+          }
         },
         "warnings": {
+          "default": [],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/WesperSiteContextV1/properties/bindings/properties/warnings/items"
-          },
-          "default": []
+            "$ref": "#/definitions/__schema2"
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "contentModel": {
+      "type": "object",
+      "properties": {
+        "postTypes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              },
+              "public": {
+                "type": "boolean"
+              },
+              "showInRest": {
+                "type": "boolean"
+              },
+              "taxonomies": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fields": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "source": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "args": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/definitions/__schema1"
+                      }
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "single": {
+                      "type": "boolean"
+                    },
+                    "showInRest": {
+                      "type": "boolean"
+                    },
+                    "bindable": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "source",
+                    "args"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "patterns": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/definitions/__schema1"
+            }
+          }
+        }
+      },
+      "additionalProperties": {}
+    },
+    "media": {
+      "type": "object",
+      "properties": {
+        "imageSizes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/definitions/__schema1"
+            }
+          }
+        },
+        "maxUploadSize": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/__schema2"
+      }
+    }
+  },
+  "required": [
+    "contextVersion",
+    "site",
+    "provenance",
+    "warnings"
+  ],
+  "additionalProperties": {},
+  "definitions": {
+    "__schema0": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
-        "contextVersion",
-        "site",
-        "provenance",
-        "wordpress",
-        "theme",
-        "blocks",
-        "bindings",
-        "contentModel",
-        "patterns",
-        "media"
+        "slug",
+        "value"
       ],
-      "additionalProperties": true
+      "additionalProperties": {}
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/__schema1"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/__schema1"
+          }
+        }
+      ]
+    },
+    "__schema2": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message",
+        "surface"
+      ]
     }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  }
 }

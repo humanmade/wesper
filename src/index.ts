@@ -2,10 +2,11 @@ export * from './types.js';
 export { siteContextJsonSchema, siteContextSchema } from './schema.js';
 export { canonicalize, sourceHash } from './canonical.js';
 export { redactSecrets } from './redact.js';
+export { orderManifestForJson, stringifyManifest } from './serialize.js';
 export { parseThemeJsonSettings } from './theme.js';
 export { summarize, formatSummaryMarkdown } from './summary.js';
 
-import { ZodError } from 'zod';
+import { ZodError } from 'zod/v4';
 import { collectWpCli } from './collector/wpcli.js';
 import { redactSecrets } from './redact.js';
 import { siteContextSchema } from './schema.js';
