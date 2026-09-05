@@ -192,9 +192,13 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
 
 $patterns = array();
 if (class_exists('WP_Block_Patterns_Registry')) {
-    foreach (WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $name => $pattern) {
+    foreach (WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $pattern) {
+        if (!is_array($pattern) || !isset($pattern['name']) || !is_string($pattern['name']) || trim($pattern['name']) === '') {
+            $warnings[] = wesper_warning('patterns.invalid_identifier', 'patterns', 'A registered block pattern did not include a usable string name and was omitted.');
+            continue;
+        }
         $patterns[] = array(
-            'name' => $name,
+            'name' => $pattern['name'],
             'title' => isset($pattern['title']) ? $pattern['title'] : null,
             'categories' => isset($pattern['categories']) ? array_values((array) $pattern['categories']) : array(),
             'blockTypes' => isset($pattern['blockTypes']) ? array_values((array) $pattern['blockTypes']) : array(),

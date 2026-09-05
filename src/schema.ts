@@ -56,6 +56,13 @@ export const bindingFieldSchema = z
   })
   .passthrough();
 
+export const patternSchema = z
+  .object({
+    // Pattern names are reusable registry identifiers, not collection offsets.
+    name: z.string().min(1).regex(/\S/, 'Pattern name must not be blank.'),
+  })
+  .catchall(jsonValueSchema);
+
 export const siteContextSchema = z
   .object({
     $schema: z.string().url().default(SCHEMA_URL),
@@ -143,7 +150,7 @@ export const siteContextSchema = z
       .optional(),
     patterns: z
       .object({
-        items: z.array(z.record(z.string(), jsonValueSchema)).default([]),
+        items: z.array(patternSchema).default([]),
       })
       .passthrough()
       .optional(),
