@@ -63,6 +63,19 @@ consumer can share — instead of each agent re-deriving brittle introspection o
   eval anything from it. Wesper reads; it does not register sources, create fields, or run a
   service.
 
+### Input and credential safety
+
+Wesper treats collector data and manifests as untrusted input. Credential-like dictionary
+keys are redacted, and URL userinfo is rejected for collector options or sanitised before a
+manifest is hashed or serialised. Collector diagnostics redact Authorization headers and
+credential-bearing command values before they reach stderr.
+
+Traversal is bounded to 64 nested containers and 100,000 object members or array slots.
+`validate()` turns input that exceeds those limits (or has a cycle or accessor) into an
+`ok: false` result with a value-free error; `redactSecrets()` and canonicalization throw the
+exported `RedactionError` for the same condition. This prevents malformed input from causing
+uncontrolled recursion while retaining ordinary schema fields and design-token metadata.
+
 ## Hash and validation contract
 
 `provenance.sourceHash` is the SHA-256 fingerprint of the final collected document. Before it is

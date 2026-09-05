@@ -184,6 +184,16 @@ describe('REST collector', () => {
     await expect(collect({ collector: 'rest' })).rejects.toThrow('REST collector requires --wp-url.');
   });
 
+  it('rejects URL userinfo before it can be requested or serialised', async () => {
+    stubFetch(defaultRoutes);
+    const password = 'synthetic-rest-app-password';
+
+    await expect(
+      collect({ collector: 'rest', wpUrl: `https://synthetic-user:${password}@example.test` }),
+    ).rejects.toThrow('--wp-url must not contain URL credentials.');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('refuses to send an Application Password over a non-HTTPS connection', async () => {
     stubFetch(defaultRoutes);
 

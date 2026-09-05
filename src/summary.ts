@@ -142,7 +142,10 @@ export function formatSummaryMarkdown(context: SiteContext): string {
 }
 
 function groupWarnings(warnings: ContextWarning[]): Record<string, ContextWarning[]> {
-  const grouped: Record<string, ContextWarning[]> = {};
+  // Warning surfaces come from manifests, so they can be names such as
+  // "constructor" or "__proto__". A prototype-less dictionary ensures those
+  // names are treated solely as data keys rather than inherited properties.
+  const grouped = Object.create(null) as Record<string, ContextWarning[]>;
   for (const warning of warnings) {
     grouped[warning.surface] ??= [];
     grouped[warning.surface]?.push(warning);

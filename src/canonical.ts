@@ -11,12 +11,18 @@ import { redactSecrets } from './redact.js';
  * numeric order (for example "2" before "10") rather than JCS order.
  */
 export function canonicalize(value: unknown): string {
-  return serializeJson(value, new Set<object>());
+  // Canonicalization is a public package boundary too. Work only from the
+  // bounded, data-only copy so it cannot recurse indefinitely or turn a
+  // credential-bearing URL into a stable leaked representation.
+  return serializeJson(redactSecrets(value), new Set<object>());
 }
 
 export function sourceHash(value: unknown): string {
   const hash = createHash('sha256');
-  hash.update(canonicalize(redactSecrets(withoutVolatileProvenance(value))));
+  // Redact before cloning or recursively sorting: callers can pass arbitrary
+  // manifest-shaped input and no raw credential should reach the hash input.
+  const redacted = redactSecrets(value);
+  hash.update(serializeJson(withoutVolatileProvenance(redacted), new Set<object>()));
   return `sha256:${hash.digest('hex')}`;
 }
 

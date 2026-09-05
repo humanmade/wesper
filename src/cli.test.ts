@@ -54,6 +54,44 @@ describe('CLI', () => {
     expect(result.stderr).toContain('unknown option');
   });
 
+  it('redacts credentials from CLI error diagnostics', () => {
+    const password = 'synthetic-cli-app-password';
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'validate', `https://synthetic-user:${password}@example.test/manifest.json`],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('[REDACTED_URL]');
+    expect(result.stderr).not.toContain('synthetic-user');
+    expect(result.stderr).not.toContain(password);
+  });
+
+  it('redacts camel-cased and space-separated Application Passwords from CLI diagnostics', () => {
+    const camelCasedPassword = 'synthetic-camel-cased-password';
+    const groupedPassword = 'abcd efgh ijkl mnop qrst uvwx';
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        'src/cli.ts',
+        'validate',
+        `wpAppPassword=${camelCasedPassword}; WP_API_PASSWORD=${groupedPassword}`,
+      ],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('wpAppPassword: [REDACTED]');
+    expect(result.stderr).toContain('WP_API_PASSWORD: [REDACTED]');
+    expect(result.stderr).not.toContain(camelCasedPassword);
+    for (const group of groupedPassword.split(' ')) {
+      expect(result.stderr).not.toContain(group);
+    }
+  });
+
   it('allows partial evidence normally but rejects it under strict policy', async () => {
     const wpDir = await mkdtemp(path.join(tmpdir(), 'wesper-cli-wp-'));
     const wp = path.join(wpDir, 'wp');

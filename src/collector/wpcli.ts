@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
+import { assertNoUrlCredentials } from './safe.js';
 import { UsageError, type CollectOptions, type SiteContext } from '../types.js';
 
 const execFileAsync = promisify(execFile);
@@ -9,15 +10,31 @@ export async function collectWpCli(options: CollectOptions): Promise<SiteContext
   if (!options.wpPath && !options.ssh) {
     throw new UsageError('WP-CLI collector requires --wp-path or --ssh.');
   }
+  if (options.wpUrl) {
+    assertNoUrlCredentials(options.wpUrl, '--wp-url');
+  }
 
   const wpBinary = options.wpBinary ?? 'wp';
   const args = wpArgs(options, ['eval', PHP_COLLECTOR]);
-  const { stdout } = await execFileAsync(wpBinary, args, {
-    encoding: 'utf8',
-    maxBuffer: 1024 * 1024 * 20,
-  });
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync(wpBinary, args, {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024 * 20,
+    }));
+  } catch {
+    // execFile errors include the complete command line, which may have come
+    // from untrusted CLI input. Keep the process error out of manifests/logs.
+    throw new Error('WP-CLI collector failed to run. Check WP-CLI availability and collector options.');
+  }
 
-  const raw = parseCollectorJson(stdout);
+  let raw: Record<string, unknown>;
+  try {
+    raw = parseCollectorJson(stdout);
+  } catch {
+    // JSON parser diagnostics can include fragments of collector output.
+    throw new Error('WP-CLI collector returned malformed JSON.');
+  }
   return normalizeCollectorOutput(raw, { collector: 'wp-cli', collectorVersion: COLLECTOR_VERSION });
 }
 
