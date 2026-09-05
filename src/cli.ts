@@ -63,7 +63,7 @@ program
 
 program
   .command('validate <manifest>')
-  .description('Validate a manifest against the wesper schema')
+  .description('Validate a manifest against the wesper schema (does not verify source-hash integrity)')
   .action(async (manifestPath: string) => {
     try {
       const manifest = await readJson(manifestPath);
