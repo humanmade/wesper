@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
 import { normalizeCollectorOutput } from './normalize.js';
@@ -9,11 +9,15 @@ let mockedOutput = wpOutput();
 let mockedError: Error | null = null;
 let mockedStdout: string | undefined;
 
-vi.mock('node:child_process', () => ({
-  execFile: vi.fn((_file, _args, _options, callback) => {
-    callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
-  }),
-}));
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    execFile: vi.fn((_file, _args, _options, callback) => {
+      callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
+    }),
+  };
+});
 
 describe('WP-CLI collector', () => {
   afterEach(() => {
@@ -156,6 +160,46 @@ describe('WP-CLI collector', () => {
     expect(context.warnings.map((warning) => warning.code)).toEqual(
       expect.arrayContaining(['blocks.invalid_evidence', 'bindings.invalid_evidence', 'contentModel.invalid_evidence']),
     );
+  });
+
+  it('normalizes only explicit PHP empty-array dictionary transport values', () => {
+    const context = normalizeCollectorOutput(
+      {
+        site: {},
+        blocks: { types: [{ name: 'test/block', attributes: [], supports: [], source: 'plugin' }] },
+        bindings: { available: true, sources: [], supportedAttributes: [], warnings: [] },
+        contentModel: { postTypes: [] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.blocks?.types[0]).toMatchObject({ attributes: {}, supports: {} });
+    expect(context.bindings?.supportedAttributes).toEqual({});
+    expect(validate(JSON.parse(stringifyManifest(context))).ok).toBe(true);
+    expect(context.provenance.sourceHash).toBe(sourceHash(context));
+
+    expect(() => normalizeCollectorOutput(
+      {
+        site: {},
+        blocks: { types: [{ name: 'test/block', attributes: ['not-a-map'], supports: {}, source: 'plugin' }] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    )).toThrow();
+  });
+
+  it('serializes PHP empty dictionary boundaries as JSON objects', () => {
+    const helper = collectorSourceForTests().match(/function wesper_json_map\(\$value\) \{[\s\S]*?\n\}/)?.[0];
+    expect(helper).toBeDefined();
+
+    const output = execFileSync(
+      '/opt/homebrew/bin/php',
+      ['-r', `${helper}\necho json_encode(array('attributes' => wesper_json_map(array()), 'supports' => wesper_json_map(array()), 'supportedAttributes' => wesper_json_map(array())));`],
+      { encoding: 'utf8' },
+    );
+
+    expect(JSON.parse(output)).toEqual({ attributes: {}, supports: {}, supportedAttributes: {} });
   });
 
   it('does not default missing nested binding-source evidence to empty/null', () => {
@@ -326,7 +370,7 @@ describe('WP-CLI collector', () => {
         supportedAttributes: { 'example/block': ['z', 'a'] },
       },
       contentModel: {
-        postTypes: [{ name: 'post', fields: [{ name: 'example', source: 'example/source', args: {} }] }],
+        postTypes: [{ name: 'post', fields: [{ name: 'example', source: 'example/source', args: {}, bindable: true }] }],
       },
       patterns: { items: [] },
       media: {},
@@ -360,12 +404,12 @@ describe('WP-CLI collector', () => {
         },
       },
       plugins: reverse
-        ? [{ slug: 'z/z.php', name: 'Zed' }, { slug: 'a/a.php', name: 'Aye' }]
-        : [{ slug: 'a/a.php', name: 'Aye' }, { slug: 'z/z.php', name: 'Zed' }],
+        ? [{ slug: 'z/z.php', name: 'Zed', active: true }, { slug: 'a/a.php', name: 'Aye', active: true }]
+        : [{ slug: 'a/a.php', name: 'Aye', active: true }, { slug: 'z/z.php', name: 'Zed', active: true }],
       blocks: {
         types: reverse
-          ? [{ name: 'z/block', attributes: {}, supports: {} }, { name: 'a/block', attributes: {}, supports: {} }]
-          : [{ name: 'a/block', attributes: {}, supports: {} }, { name: 'z/block', attributes: {}, supports: {} }],
+          ? [{ name: 'z/block', attributes: {}, supports: {}, source: 'plugin' }, { name: 'a/block', attributes: {}, supports: {}, source: 'plugin' }]
+          : [{ name: 'a/block', attributes: {}, supports: {}, source: 'plugin' }, { name: 'z/block', attributes: {}, supports: {}, source: 'plugin' }],
       },
       bindings: {
         available: true,
@@ -382,12 +426,12 @@ describe('WP-CLI collector', () => {
             taxonomies: reverse ? ['z', 'a'] : ['a', 'z'],
             fields: reverse
               ? [
-                  { name: 'z', source: 'example/source', args: {} },
-                  { name: 'a', source: 'example/source', args: {} },
+                  { name: 'z', source: 'a/source', args: {}, bindable: true },
+                  { name: 'a', source: 'a/source', args: {}, bindable: true },
                 ]
               : [
-                  { name: 'a', source: 'example/source', args: {} },
-                  { name: 'z', source: 'example/source', args: {} },
+                  { name: 'a', source: 'a/source', args: {}, bindable: true },
+                  { name: 'z', source: 'a/source', args: {}, bindable: true },
                 ],
           },
         ],
@@ -470,8 +514,8 @@ describe('WP-CLI collector', () => {
             showInRest: true,
             taxonomies: ['a', 'Z', '_internal'],
             fields: [
-              { name: 'a', source: 'core/post-data', args: { field: 'a' }, bindable: true },
-              { name: 'Z', source: 'core/post-data', args: { field: 'Z' }, bindable: true },
+              { name: 'date', source: 'core/post-data', args: { field: 'date' }, bindable: true },
+              { name: 'link', source: 'core/post-data', args: { field: 'link' }, bindable: true },
             ],
           },
           { name: 'Z', label: 'Z', public: true, showInRest: true, taxonomies: [], fields: [] },
@@ -487,7 +531,7 @@ describe('WP-CLI collector', () => {
     expect(context.bindings?.supportedAttributes['core/a']).toEqual(['Z', '_internal', 'a']);
     expect(context.contentModel?.postTypes.map((postType) => postType.name)).toEqual(['Z', '_internal', 'a']);
     expect(context.contentModel?.postTypes[2]?.taxonomies).toEqual(['Z', '_internal', 'a']);
-    expect(context.contentModel?.postTypes[2]?.fields.map((field) => field.name)).toEqual(['Z', 'a']);
+    expect(context.contentModel?.postTypes[2]?.fields.map((field) => field.name)).toEqual(['date', 'link']);
   });
 
   it('keeps collector post-data fields aligned with WordPress core bindings', () => {
@@ -504,6 +548,14 @@ describe('WP-CLI collector', () => {
     expect(source).not.toContain("array('key' => 'title', 'source' => 'core/post-data'");
     expect(source).not.toContain("array('key' => 'excerpt', 'source' => 'core/post-data'");
     expect(source).not.toContain("array('key' => 'featured_media', 'source' => 'core/post-data'");
+  });
+
+  it('keeps unavailable bindings free of supported-attribute fallback evidence', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain("if ($bindings_available) {");
+    expect(source).toContain("$supported_attributes = wesper_json_map($supported_attributes);");
+    expect(source).toContain("'bindings.unavailable'");
   });
 
   it('only warns about missing registered meta on public REST post types', () => {
@@ -537,7 +589,10 @@ function wpOutput(): Record<string, unknown> {
     blocks: { types: [{ name: 'core/paragraph', attributes: {}, supports: {}, source: 'core' }] },
     bindings: {
       available: true,
-      sources: [{ name: 'core/post-meta', label: 'Post Meta', usesContext: ['postId', 'postType'], argsSchema: null }],
+      sources: [
+        { name: 'core/post-data', label: 'Post Data', usesContext: ['postId', 'postType'], argsSchema: null },
+        { name: 'core/post-meta', label: 'Post Meta', usesContext: ['postId', 'postType'], argsSchema: null },
+      ],
       supportedAttributes: { 'core/paragraph': ['content'] },
       warnings: [],
     },

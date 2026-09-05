@@ -4,10 +4,13 @@ import { CollectionTransportError, UsageError, type CollectOptions, type Context
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
+// Core REST does not expose the binding-source registry. These fields are
+// useful content-model evidence, but cannot be advertised as binding-ready
+// without a reported source.
 const CORE_POST_DATA_FIELDS = [
-  { name: 'date', key: 'date', source: 'core/post-data', args: { field: 'date' }, type: 'string', bindable: true },
-  { name: 'modified', key: 'modified', source: 'core/post-data', args: { field: 'modified' }, type: 'string', bindable: true },
-  { name: 'link', key: 'link', source: 'core/post-data', args: { field: 'link' }, type: 'string', bindable: true },
+  { name: 'date', key: 'date', source: 'core/post-data', args: { field: 'date' }, type: 'string', bindable: false },
+  { name: 'modified', key: 'modified', source: 'core/post-data', args: { field: 'modified' }, type: 'string', bindable: false },
+  { name: 'link', key: 'link', source: 'core/post-data', args: { field: 'link' }, type: 'string', bindable: false },
 ];
 
 export async function collectRest(options: CollectOptions): Promise<SiteContext> {

@@ -81,6 +81,7 @@ describe('REST collector', () => {
     expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
     expect(context.blocks?.types.map((block) => block.name)).toEqual(['acme/widget', 'core/paragraph']);
     expect(context.contentModel?.postTypes[0]?.fields.map((field) => field.name)).toEqual(['date', 'link', 'modified']);
+    expect(context.contentModel?.postTypes[0]?.fields.every((field) => !field.bindable)).toBe(true);
     expect(context.patterns?.items.map((item) => item.name)).toEqual(['core/hero']);
     // Several REST surfaces are intentionally unavailable over core endpoints.
     // Their informational warnings still make the evidence partial.

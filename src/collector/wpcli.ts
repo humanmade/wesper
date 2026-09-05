@@ -95,6 +95,12 @@ function wesper_public_props($object, $props) {
     return $out;
 }
 
+// PHP serializes an empty array as JSON [], but these collector surfaces are
+// JSON object maps even when WordPress reports no entries.
+function wesper_json_map($value) {
+    return (object) (is_array($value) || is_object($value) ? $value : array());
+}
+
 global $wp_version;
 
 $theme = wp_get_theme();
@@ -125,16 +131,18 @@ foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name =
         'apiVersion' => isset($block_type->api_version) ? $block_type->api_version : null,
         'title' => isset($block_type->title) ? $block_type->title : null,
         'category' => isset($block_type->category) ? $block_type->category : null,
-        'attributes' => isset($block_type->attributes) ? $block_type->attributes : array(),
-        'supports' => isset($block_type->supports) ? $block_type->supports : array(),
+        'attributes' => wesper_json_map(isset($block_type->attributes) ? $block_type->attributes : array()),
+        'supports' => wesper_json_map(isset($block_type->supports) ? $block_type->supports : array()),
         'source' => strpos($name, 'core/') === 0 ? 'core' : 'plugin',
     );
 }
 
 $binding_sources = array();
+$binding_source_names = array();
 $bindings_available = function_exists('get_all_registered_block_bindings_sources');
 if ($bindings_available) {
     foreach (get_all_registered_block_bindings_sources() as $name => $source) {
+        $binding_source_names[] = $name;
         $binding_sources[] = array(
             'name' => $name,
             'label' => isset($source->label) ? $source->label : null,
@@ -156,27 +164,35 @@ $core_supported_attributes = array(
     'core/navigation-submenu' => array('url'),
 );
 $supported_attributes = array();
-if (function_exists('get_block_bindings_supported_attributes')) {
-    foreach ($block_types as $block_type) {
-        $attrs = get_block_bindings_supported_attributes($block_type['name']);
-        if (!empty($attrs)) {
-            $supported_attributes[$block_type['name']] = array_values($attrs);
+if ($bindings_available) {
+    if (function_exists('get_block_bindings_supported_attributes')) {
+        foreach ($block_types as $block_type) {
+            $attrs = get_block_bindings_supported_attributes($block_type['name']);
+            if (!empty($attrs)) {
+                $supported_attributes[$block_type['name']] = array_values($attrs);
+            }
         }
+    } else {
+        $supported_attributes = $core_supported_attributes;
+        $warnings[] = wesper_warning('bindings.supported_attributes_partial', 'bindings.supportedAttributes', 'WordPress does not expose get_block_bindings_supported_attributes(); using documented core compatibility table.');
     }
-} else {
-    $supported_attributes = $core_supported_attributes;
-    $warnings[] = wesper_warning('bindings.supported_attributes_partial', 'bindings.supportedAttributes', 'WordPress does not expose get_block_bindings_supported_attributes(); using documented core compatibility table.');
 }
+$supported_attributes = wesper_json_map($supported_attributes);
 
 $post_types = array();
 foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_object) {
     $rest_visible_meta_count = 0;
-    $fields = array(
-        array('name' => 'date', 'key' => 'date', 'source' => 'core/post-data', 'args' => array('field' => 'date'), 'type' => 'string', 'bindable' => true),
-        array('name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data', 'args' => array('field' => 'modified'), 'type' => 'string', 'bindable' => true),
-        array('name' => 'link', 'key' => 'link', 'source' => 'core/post-data', 'args' => array('field' => 'link'), 'type' => 'string', 'bindable' => true),
-    );
-    $registered_meta = function_exists('get_registered_meta_keys') ? get_registered_meta_keys('post', $post_type_name) : array();
+    $fields = array();
+    if (in_array('core/post-data', $binding_source_names, true)) {
+        $fields = array(
+            array('name' => 'date', 'key' => 'date', 'source' => 'core/post-data', 'args' => array('field' => 'date'), 'type' => 'string', 'bindable' => true),
+            array('name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data', 'args' => array('field' => 'modified'), 'type' => 'string', 'bindable' => true),
+            array('name' => 'link', 'key' => 'link', 'source' => 'core/post-data', 'args' => array('field' => 'link'), 'type' => 'string', 'bindable' => true),
+        );
+    }
+    $registered_meta = in_array('core/post-meta', $binding_source_names, true) && function_exists('get_registered_meta_keys')
+        ? get_registered_meta_keys('post', $post_type_name)
+        : array();
     foreach ($registered_meta as $meta_key => $args) {
         $show_in_rest = !empty($args['show_in_rest']);
         $protected = isset($args['protected']) ? (bool) $args['protected'] : strpos((string) $meta_key, '_') === 0;
@@ -195,8 +211,10 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
             'bindable' => true,
         );
     }
-    if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
-        $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info', 'complete');
+    if (in_array('core/post-meta', $binding_source_names, true)) {
+        if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
+            $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info', 'complete');
+        }
     }
     $post_types[] = array(
         'name' => $post_type_name,
