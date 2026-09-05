@@ -7,7 +7,10 @@ const REDACTED_URL = '[REDACTED_URL]';
 const URL_WITH_USERINFO = /(?:(?:\b[a-z][a-z\d+.-]*:)?\/\/)[^\s/?#@]+@[^\s'"`<>\])},]*/gi;
 const URL_WITH_USERINFO_TEST = /(?:(?:\b[a-z][a-z\d+.-]*:)?\/\/)[^\s/?#@]+@[^\s'"`<>\])},]*/i;
 const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization)\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,}\]]+)/gi;
-const LABELLED_SECRET = /\b((?:wp[_-]?api[_-]?password|wpappassword|application[-_ ]?password|app[-_ ]?password|password|passwd|passphrase))\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
+// WordPress displays Application Passwords in space-separated groups. Handle
+// those labels before generic passwords so all groups are removed together.
+const LABELLED_APP_PASSWORD = /\b((?:wp[_-]?api[_-]?password|wp[_-]?app[_-]?password|application[-_ ]?password|app[-_ ]?password))\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+(?:[ \t]+[^\s,;}\]]+)*)/gi;
+const LABELLED_SECRET = /\b((?:password|passwd|passphrase))\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
 const COMMAND_CREDENTIAL = /(^|\s)((?:-u|--?(?:user|password|passwd|pwd)|--(?:app[-_]?password|application[-_]?password)))(?:=|\s+)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
 
 /**
@@ -23,6 +26,7 @@ export function sanitizeErrorMessage(error: unknown): string {
   return text
     .replace(URL_WITH_USERINFO, REDACTED_URL)
     .replace(AUTHORIZATION_HEADER, '$1: [REDACTED]')
+    .replace(LABELLED_APP_PASSWORD, '$1: [REDACTED]')
     .replace(LABELLED_SECRET, '$1: [REDACTED]')
     .replace(COMMAND_CREDENTIAL, `$1$2=${REDACTED}`);
 }
