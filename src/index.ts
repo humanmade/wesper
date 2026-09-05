@@ -7,6 +7,7 @@ export { parseThemeJsonSettings } from './theme.js';
 export { summarize, formatSummaryMarkdown } from './summary.js';
 
 import { ZodError } from 'zod/v4';
+import { collectRest } from './collector/rest.js';
 import { collectWpCli } from './collector/wpcli.js';
 import { redactSecrets } from './redact.js';
 import { siteContextSchema } from './schema.js';
@@ -18,6 +19,8 @@ export async function collect(options: CollectOptions): Promise<SiteContext> {
   switch (collector) {
     case 'wp-cli':
       return enforceStrict(await collectWpCli({ ...options, collector }), options);
+    case 'rest':
+      return enforceStrict(await collectRest({ ...options, collector }), options);
     case 'fixture':
       throw new Error('Fixture collection is represented by validate() on a manifest file.');
     default:

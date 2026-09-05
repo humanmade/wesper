@@ -1,0 +1,376 @@
+- generic [active] [ref=e1]:
+  - button "Open chatbot" [ref=e3]:
+    - img "Bubble Button" [ref=e4]
+    - img "Bubble Button"
+  - main [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e14]:
+        - link "Accelerate" [ref=e17] [cursor=pointer]:
+          - /url: /
+          - img "Accelerate" [ref=e18]
+        - navigation [ref=e19]:
+          - navigation "Main" [ref=e20]:
+            - list [ref=e22]:
+              - listitem [ref=e23]:
+                - button "Features" [ref=e24]:
+                  - text: Features
+                  - img [ref=e25]
+          - link "Download" [ref=e28] [cursor=pointer]:
+            - /url: https://wordpress.org/plugins/altis-accelerate/
+          - link "Pricing" [ref=e30] [cursor=pointer]:
+            - /url: /pricing/
+          - link "Sign in" [ref=e32] [cursor=pointer]:
+            - /url: /wp-login.php?redirect_to=/sites/
+      - generic [ref=e33]:
+        - generic [ref=e37]:
+          - generic [ref=e39]:
+            - generic [ref=e40]: ██╗ ██╗███████╗███████╗██████╗ ███████╗██████╗
+            - generic [ref=e41]: ██║ ██║██╔════╝██╔════╝██╔══██╗██╔════╝██╔══██╗
+            - generic [ref=e42]: ██║ █╗ ██║█████╗ ███████╗██████╔╝█████╗ ██████╔╝
+            - generic [ref=e43]: "██║{██╗██║██╔[[╝ /?═══\\*║█?{}_═\\ ]█\\#== \\]]#>!<}"
+            - generic [ref=e44]: "0{-{*_{#\\[/0\\{^#!-/*\\>\\->^1_/ [@<\\!1}@10[ *11"
+            - generic [ref=e45]: "+\\-+#0!- -\\=?]?10@*<{#-*//0\\ #0?\\[@\\\\>{< /[0"
+          - heading "A CLI that reads what a WordPress site can accept." [level=1] [ref=e46]
+          - paragraph [ref=e47]:
+            - text: Wesper is the read primitive for the agentic WordPress pipeline. It reads one site — block registry, theme tokens, Block Bindings sources and fields, post types — into a single portable
+            - code [ref=e48]: site.context.json
+            - text: manifest, with provenance, freshness, and every gap recorded as a warning instead of a guess.
+          - generic [ref=e49]:
+            - 'button "Copy: npm install wesper" [ref=e50]':
+              - generic [ref=e51]: ❯
+              - generic [ref=e52]: npm install wesper
+              - generic [ref=e53]:
+                - img [ref=e54]
+                - text: copy
+            - generic [ref=e56]:
+              - link "GitHub humanmade/wesper" [ref=e57] [cursor=pointer]:
+                - /url: https://github.com/humanmade/wesper
+                - img [ref=e59]
+                - generic [ref=e61]: GitHub
+                - generic [ref=e62]: humanmade/wesper
+              - link "npm v0.0.1" [ref=e63] [cursor=pointer]:
+                - /url: https://www.npmjs.com/package/wesper
+                - img [ref=e65]
+                - generic [ref=e67]: npm
+                - generic [ref=e68]: v0.0.1
+          - paragraph [ref=e69]: Read it once; every consumer reads one known shape. It reads — it never writes.
+          - paragraph [ref=e70]: requires Node 18.12+ · GPL-2.0
+        - generic [ref=e73]:
+          - generic [ref=e75]:
+            - generic [ref=e80]: wesper collect
+            - paragraph [ref=e82]: ❯ wesper collect --wp-path ./pu
+          - generic [ref=e84]: →
+          - generic [ref=e85]:
+            - generic [ref=e90]: site.context.json
+            - generic [ref=e91]:
+              - paragraph [ref=e92]: "{"
+              - paragraph [ref=e93]: "\"$schema\": \"https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json\","
+              - paragraph [ref=e94]: "\"contextVersion\": 1,"
+              - paragraph [ref=e95]: "\"site\": {"
+              - paragraph [ref=e96]: "\"url\": \"https://store.northwind.co\","
+              - paragraph [ref=e97]: "\"name\": \"Northwind Supply Co.\","
+              - paragraph [ref=e98]: "\"environment\": \"production\","
+              - paragraph [ref=e99]: "\"isMultisite\": false"
+              - paragraph [ref=e100]: "},"
+              - paragraph [ref=e101]: "\"provenance\": {"
+              - paragraph [ref=e102]: "\"collectedAt\": \"2026-06-25T14:02:11Z\","
+              - paragraph [ref=e103]: "\"collector\": \"wp-cli\","
+              - paragraph [ref=e104]: "\"collectorVersion\": \"0.1.0\","
+              - paragraph [ref=e105]: "\"sourceHash\": \"sha256:9f2c4ab1…b41e\","
+              - paragraph [ref=e106]: "\"partial\": false"
+              - paragraph [ref=e107]: "},"
+              - paragraph [ref=e108]: "\"wordpress\": { \"version\": \"6.8.1\", \"locale\": \"en_US\" },"
+              - paragraph [ref=e109]: "\"theme\": {"
+              - paragraph [ref=e110]: "\"name\": \"Ollie\","
+              - paragraph [ref=e111]: "\"isBlockTheme\": true,"
+              - paragraph [ref=e112]: "\"tokens\": {"
+              - paragraph [ref=e113]: "\"colors\": [{ \"slug\": \"base\", \"value\": \"#ffffff\" },"
+              - paragraph [ref=e114]: "{ \"slug\": \"contrast\", \"value\": \"#0f1115\" },"
+              - paragraph [ref=e115]: "{ \"slug\": \"accent\", \"value\": \"#2f6df6\" }],"
+              - paragraph [ref=e116]: "\"spacing\": [{ \"slug\": \"40\", \"value\": \"clamp(2rem, 5vw, 4rem)\" }],"
+              - paragraph [ref=e117]: "\"typography\": [{ \"slug\": \"display\", \"value\": \"Hanken Grotesk\" }]"
+              - paragraph [ref=e118]: "}"
+              - paragraph [ref=e119]: "},"
+              - paragraph [ref=e120]: "\"bindings\": {"
+              - paragraph [ref=e121]: "\"available\": true,"
+              - paragraph [ref=e122]: "\"sources\": [{ \"name\": \"core/post-meta\", \"usesContext\": [\"postId\"] },"
+              - paragraph [ref=e123]: "{ \"name\": \"acf/field\" }],"
+              - paragraph [ref=e124]: "\"supportedAttributes\": {"
+              - paragraph [ref=e125]: "\"core/paragraph\": [\"content\"],"
+              - paragraph [ref=e126]: "\"core/image\": [\"url\", \"alt\"],"
+              - paragraph [ref=e127]: "\"core/heading\": [\"content\"]"
+              - paragraph [ref=e128]: "}"
+              - paragraph [ref=e129]: "},"
+              - paragraph [ref=e130]: "\"contentModel\": {"
+              - paragraph [ref=e131]: "\"postTypes\": [{"
+              - paragraph [ref=e132]: "\"name\": \"product\","
+              - paragraph [ref=e133]: "\"showInRest\": true,"
+              - paragraph [ref=e134]: "\"fields\": [{ \"key\": \"price\", \"source\": \"core/post-meta\", \"bindable\": true },"
+              - paragraph [ref=e135]: "{ \"key\": \"sku\", \"source\": \"core/post-meta\", \"bindable\": true },"
+              - paragraph [ref=e136]: "{ \"key\": \"_internal\",\"source\": \"core/post-meta\", \"bindable\": false }]"
+              - paragraph [ref=e137]: "}]"
+              - paragraph [ref=e138]: "},"
+              - paragraph [ref=e139]: "\"warnings\": [{"
+              - paragraph [ref=e140]: "\"code\": \"patterns.unreadable\","
+              - paragraph [ref=e141]: "\"severity\": \"warning\","
+              - paragraph [ref=e142]: "\"surface\": \"patterns\","
+              - paragraph [ref=e143]: "\"message\": \"REST patterns endpoint returned 401; pattern list is absent, not empty.\""
+              - paragraph [ref=e144]: "}]"
+              - paragraph [ref=e145]: "}"
+      - generic [ref=e149]:
+        - generic [ref=e150]:
+          - heading "Read once, hand off everywhere." [level=2] [ref=e151]
+          - paragraph [ref=e152]: Collect a site into a manifest, then let any consumer read one known shape — instead of every agent re-deriving brittle introspection of its own.
+        - generic [ref=e153]:
+          - generic [ref=e154]:
+            - heading "Collect" [level=3] [ref=e155]:
+              - img [ref=e156]
+              - text: Collect
+            - paragraph [ref=e159]: wesper collect → site.context.json
+            - paragraph [ref=e160]: Read the registry, theme tokens, binding sources and fields, post types, patterns and media rules — by WP-CLI, REST/Abilities/MCP, or a fixture. The collector is swappable; the manifest is the constant.
+            - generic [ref=e162]:
+              - generic [ref=e167]: wesper collect
+              - generic [ref=e168]:
+                - paragraph [ref=e169]: ❯ wesper collect --wp-path ./public --out site.context.json
+                - paragraph [ref=e170]: reading block registry … 214 block types
+                - paragraph [ref=e171]: reading theme.json … Ollie · 3 colors · 1 font · merged
+                - paragraph [ref=e172]: reading binding sources … core/post-meta, acf/field
+                - paragraph [ref=e173]: reading post types … product (2 bindable fields)
+                - paragraph [ref=e174]: "! patterns endpoint 401 → recorded as warning, not invented"
+                - paragraph [ref=e175]: stamped sha256:9f2c…b41e · collected 2026-06-25T14:02Z
+                - paragraph [ref=e176]: ✓ wrote site.context.json · 1 warning
+          - generic [ref=e177]:
+            - heading "Consume" [level=3] [ref=e178]:
+              - img [ref=e179]
+              - text: Consume
+            - paragraph [ref=e181]: wesper summarize · validate
+            - paragraph [ref=e182]: Hand the manifest to an agent, the binding pass, or Block Runner. Summarize it for a model, validate it against the schema in CI, and stamp it so a stale read fails loudly instead of shipping a wrong block.
+            - generic [ref=e184]:
+              - generic [ref=e189]: wesper summarize
+              - generic [ref=e190]:
+                - paragraph [ref=e191]: ❯ wesper summarize site.context.json
+                - paragraph [ref=e192]: "# Northwind Supply Co. · WordPress 6.8.1 · Ollie"
+                - paragraph [ref=e193]: block types ……… 214
+                - paragraph [ref=e194]: binding sources … 2 (core/post-meta, acf/field)
+                - paragraph [ref=e195]: post types ……… 4 · bindable fields … 11
+                - paragraph [ref=e196]: patterns ………… absent (see warnings)
+                - paragraph [ref=e197]: product → price, sku · core/paragraph → content
+                - paragraph [ref=e198]: ⚠ 1 warning · patterns.unreadable
+      - generic [ref=e203]:
+        - generic [ref=e204]:
+          - heading "One manifest, the whole world model." [level=2] [ref=e205]
+          - paragraph [ref=e206]: Everything a consumer needs to answer “what can this specific site safely accept, reference, and bind to?” — normalized into one stable, versioned shape.
+        - generic [ref=e207]:
+          - generic [ref=e208]:
+            - img [ref=e209]
+            - heading "Block registry" [level=3] [ref=e211]
+            - paragraph [ref=e212]: Every registered block type the site can actually render — not what a model hopes is installed.
+          - generic [ref=e213]:
+            - img [ref=e214]
+            - heading "Theme tokens" [level=3] [ref=e216]
+            - paragraph [ref=e217]: Colour, spacing and typography slugs from theme.json, so output references presets instead of hard-coded values.
+          - generic [ref=e218]:
+            - img [ref=e219]
+            - heading "Binding sources & fields" [level=3] [ref=e221]
+            - paragraph [ref=e222]: Registered Block Bindings sources, their argument schemas, and the meta keys reachable per post type.
+          - generic [ref=e223]:
+            - img [ref=e224]
+            - heading "Content model" [level=3] [ref=e226]
+            - paragraph [ref=e227]: Public post types, their taxonomies, REST visibility, and which fields are bindable versus internal.
+          - generic [ref=e228]:
+            - img [ref=e229]
+            - heading "Patterns & media" [level=3] [ref=e231]
+            - paragraph [ref=e232]: Registered patterns, image sizes, and upload rules — the shapes content has to fit into.
+          - generic [ref=e233]:
+            - img [ref=e234]
+            - heading "Provenance & freshness" [level=3] [ref=e236]
+            - paragraph [ref=e237]: When it was collected, by which collector, a content hash, and a TTL — so consumers can detect a stale read.
+      - generic [ref=e241]:
+        - generic [ref=e242]:
+          - heading "An agent without context is flying blind." [level=2] [ref=e243]
+          - paragraph [ref=e244]: It invents attributes, binds to fields that do not exist, ignores the theme, and calls the result native. The same agent, handed one manifest, does none of that.
+        - generic [ref=e245]:
+          - generic [ref=e246]:
+            - generic [ref=e247]: an agent assumes
+            - generic [ref=e248]: site.context.json says
+          - generic [ref=e249]:
+            - generic [ref=e250]:
+              - paragraph [ref=e251]: block type
+              - paragraph [ref=e252]: emits wp:acme/pricing-table — not registered here
+            - generic [ref=e254]:
+              - img [ref=e255]
+              - generic [ref=e257]:
+                - paragraph [ref=e258]: emits wp:columns — confirmed in the registry
+                - code [ref=e259]: blocks.types[]
+          - generic [ref=e260]:
+            - generic [ref=e261]:
+              - paragraph [ref=e262]: field binding
+              - paragraph [ref=e263]: binds to meta.subtitle — that key does not exist
+            - generic [ref=e265]:
+              - img [ref=e266]
+              - generic [ref=e268]:
+                - paragraph [ref=e269]: binds to meta.price — a real, bindable field
+                - code [ref=e270]: contentModel.postTypes[].fields
+          - generic [ref=e271]:
+            - generic [ref=e272]:
+              - paragraph [ref=e273]: theme token
+              - paragraph [ref=e274]: "hard-codes #0a0a0a and 32px"
+            - generic [ref=e276]:
+              - img [ref=e277]
+              - generic [ref=e279]:
+                - paragraph [ref=e280]: references the “contrast” + “40” theme slugs
+                - code [ref=e281]: theme.tokens
+          - generic [ref=e282]:
+            - generic [ref=e283]:
+              - paragraph [ref=e284]: missing data
+              - paragraph [ref=e285]: assumes patterns exist, ships a broken reference
+            - generic [ref=e287]:
+              - img [ref=e288]
+              - generic [ref=e290]:
+                - paragraph [ref=e291]: reads the warning, degrades safely, ships nothing wrong
+                - code [ref=e292]: warnings[]
+        - generic [ref=e293]:
+          - heading "binding readiness" [level=3] [ref=e294]
+          - paragraph [ref=e295]: "The grounded column is only possible because the manifest surfaces this per site: which Block Bindings sources are registered, the context they need, and the fields reachable through them. The slice the binding pass cannot function without."
+          - table [ref=e297]:
+            - rowgroup [ref=e298]:
+              - row "source usesContext fields status" [ref=e299]:
+                - columnheader "source" [ref=e300]
+                - columnheader "usesContext" [ref=e301]
+                - columnheader "fields" [ref=e302]
+                - columnheader "status" [ref=e303]
+            - rowgroup [ref=e304]:
+              - row "core/post-meta postId price · sku ✓ registered" [ref=e305]:
+                - cell "core/post-meta" [ref=e306]
+                - cell "postId" [ref=e307]
+                - cell "price · sku" [ref=e308]
+                - cell "✓ registered" [ref=e309]
+              - row "acf/field — hero_image · cta_url ✓ registered" [ref=e310]:
+                - cell "acf/field" [ref=e311]
+                - cell "—" [ref=e312]
+                - cell "hero_image · cta_url" [ref=e313]
+                - cell "✓ registered" [ref=e314]
+      - generic [ref=e318]:
+        - generic [ref=e319]:
+          - heading "Why we built it." [level=2] [ref=e320]
+          - paragraph [ref=e321]:
+            - text: "It is the read half of the agentic-WordPress loop: read the site (Wesper) → author native blocks ("
+            - link "Block Runner" [ref=e322] [cursor=pointer]:
+              - /url: /block-runner
+            - text: ) → wire them to the site’s real data (the binding pass).
+          - paragraph [ref=e323]: Block Runner already reached into WordPress for theme tokens through a built-in resolver. Wesper is that pattern lifted out, widened to the whole world model — binding sources, fields, registry, patterns, abilities — and made a reusable artifact every consumer can share, instead of each agent re-deriving brittle introspection of its own.
+          - paragraph [ref=e324]:
+            - text: We built it because we needed it ourselves, to run autonomous optimisation experiments on
+            - link "Accelerate" [ref=e325] [cursor=pointer]:
+              - /url: /?utm_source=wesper&utm_medium=referral&utm_campaign=open-source
+            - text: ", then open-sourced it as the read primitive the ecosystem was missing — so every tool in the pipeline can trust the site it is writing to."
+        - generic [ref=e326]:
+          - generic [ref=e328]:
+            - generic [ref=e333]: wesper validate
+            - generic [ref=e334]:
+              - paragraph [ref=e335]: ❯ wesper validate site.context.json
+              - paragraph [ref=e336]: checking against site-context-v1 schema …
+              - paragraph [ref=e337]: ✓ schema valid · contextVersion 1
+              - paragraph [ref=e338]: ✓ provenance present · sourceHash, collectedAt
+              - paragraph [ref=e339]: "✗ bindings.sources[1].argsSchema: expected object|null"
+              - paragraph [ref=e340]: exit 1 · invalid manifest (1 issue)
+          - paragraph [ref=e341]: The manifest is data, not authority. Consumers validate it against the schema, never eval anything from it, and prefer doing nothing over acting on unverifiable context.
+      - generic [ref=e346]:
+        - generic [ref=e347]:
+          - heading "wesper" [level=2] [ref=e348]
+          - heading "Common questions" [level=2] [ref=e349]
+        - generic [ref=e350]:
+          - generic [ref=e351]:
+            - heading "What does it output?" [level=3] [ref=e352]:
+              - button "What does it output?" [expanded] [ref=e353]:
+                - text: What does it output?
+                - generic [ref=e354]: +
+            - region "What does it output?" [ref=e355]:
+              - generic [ref=e356]: "One portable site.context.json: the block registry, theme tokens, Block Bindings sources and fields, post types, patterns, media rules and the capability surface — normalized into a single versioned shape, with provenance and freshness, and every gap recorded as a warning rather than a guess."
+          - heading "Does it change my site?" [level=3] [ref=e358]:
+            - button "Does it change my site?" [ref=e359]:
+              - text: Does it change my site?
+              - generic [ref=e360]: +
+          - heading "How does it read a site I cannot SSH into?" [level=3] [ref=e362]:
+            - button "How does it read a site I cannot SSH into?" [ref=e363]:
+              - text: How does it read a site I cannot SSH into?
+              - generic [ref=e364]: +
+          - heading "What happens when a surface cannot be read?" [level=3] [ref=e366]:
+            - button "What happens when a surface cannot be read?" [ref=e367]:
+              - text: What happens when a surface cannot be read?
+              - generic [ref=e368]: +
+          - heading "How does this relate to Block Runner?" [level=3] [ref=e370]:
+            - button "How does this relate to Block Runner?" [ref=e371]:
+              - text: How does this relate to Block Runner?
+              - generic [ref=e372]: +
+          - heading "Is it really open source?" [level=3] [ref=e374]:
+            - button "Is it really open source?" [ref=e375]:
+              - text: Is it really open source?
+              - generic [ref=e376]: +
+    - generic [ref=e377]:
+      - img [ref=e379]
+      - generic [ref=e383]:
+        - generic [ref=e384]:
+          - heading "Built by WordPress Experts" [level=2] [ref=e385]
+          - heading "Created by Human Made" [level=2] [ref=e386]
+          - paragraph [ref=e387]: Since 2010, Human Made has been one of the world's leading enterprise WordPress agencies, powering platforms for Google, TechCrunch, Harvard, and Siemens. Accelerate brings that same level of expertise to your WordPress site.
+          - generic [ref=e388]:
+            - link "Clutch 5-star review" [ref=e389] [cursor=pointer]:
+              - /url: https://clutch.co/profile/human-made
+              - img "Clutch 5-star review" [ref=e391]
+            - link "VIP Gold Partner" [ref=e392] [cursor=pointer]:
+              - /url: https://wpvip.com/partner-announcements/human-made-wordpress-vip-gold-agency-partner/
+              - img "VIP Gold Partner" [ref=e394]
+          - link "Learn more about Human Made →" [ref=e396] [cursor=pointer]:
+            - /url: https://humanmade.com
+        - img "Human Made team" [ref=e400]
+    - generic [ref=e404]:
+      - generic [ref=e405]:
+        - img "Accelerate" [ref=e407]
+        - paragraph [ref=e408]:
+          - text: Built by
+          - link "Human Made" [ref=e409] [cursor=pointer]:
+            - /url: https://humanmade.com
+          - text: ", one of the world's leading enterprise WordPress agencies, creating content platforms for global brands since 2010."
+        - paragraph [ref=e410]: © 2026 Human Made. All rights reserved.
+      - generic [ref=e411]:
+        - heading "Product" [level=3] [ref=e412]
+        - list [ref=e413]:
+          - listitem [ref=e414]:
+            - link "All Features" [ref=e415] [cursor=pointer]:
+              - /url: /features
+          - listitem [ref=e416]:
+            - link "Download Plugin" [ref=e417] [cursor=pointer]:
+              - /url: https://wordpress.org/plugins/altis-accelerate/
+          - listitem [ref=e418]:
+            - link "Demo Playground" [ref=e419] [cursor=pointer]:
+              - /url: https://app.instawp.io/launch?t=altis-accelerate&d=v1
+          - listitem [ref=e420]:
+            - link "Login" [ref=e421] [cursor=pointer]:
+              - /url: https://www.accelerateplugin.com/
+      - generic [ref=e422]:
+        - heading "Resources" [level=3] [ref=e423]
+        - list [ref=e424]:
+          - listitem [ref=e425]:
+            - link "Blog" [ref=e426] [cursor=pointer]:
+              - /url: /blog
+          - listitem [ref=e427]:
+            - link "Documentation" [ref=e428] [cursor=pointer]:
+              - /url: /docs
+          - listitem [ref=e429]:
+            - link "Support Forums" [ref=e430] [cursor=pointer]:
+              - /url: https://altis-accelerate.canny.io/
+          - listitem [ref=e431]:
+            - link "Privacy Policy" [ref=e432] [cursor=pointer]:
+              - /url: https://www.accelerateplugin.com/privacy-policy/
+      - generic [ref=e434]:
+        - img "Word on the Future" [ref=e435]
+        - paragraph [ref=e436]: Join 3000+ industry professionals
+        - paragraph [ref=e437]:
+          - text: Get the latest WordPress insights
+          - strong [ref=e438]: every 2 weeks
+          - text: ", from innovations to industry advancements, crafted by the Human Made team."
+        - link "Subscribe now" [ref=e439] [cursor=pointer]:
+          - /url: https://hello.humanmade.com/word-on-the-future-newsletter?utm_source=accelerate&utm_medium=footer
+          - text: Subscribe now
+          - img [ref=e440]

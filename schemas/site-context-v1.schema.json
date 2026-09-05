@@ -51,6 +51,7 @@
           "type": "string",
           "enum": [
             "wp-cli",
+            "rest",
             "fixture"
           ]
         },
@@ -126,7 +127,8 @@
           "type": "string",
           "enum": [
             "merged",
-            "theme"
+            "theme",
+            "custom"
           ]
         },
         "tokens": {

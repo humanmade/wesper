@@ -16,25 +16,50 @@ program
   .description('Read a WordPress site into site.context.json')
   .option('--wp-path <path>', 'path to a local WordPress install (WP-CLI collector)')
   .option('--wp-url <url>', 'site URL for WP-CLI --url, useful for multisite')
+  .option('--rest', 'use the REST collector (App Password over core WP endpoints)')
+  .option('--wp-user <user>', 'WordPress username for the REST collector (or WP_API_USERNAME)')
   .option('--ssh <target>', 'WP-CLI SSH target')
   .option('--strict', 'fail on partial required surfaces')
   .option('--out <path>', 'write the manifest to a file instead of stdout')
-  .action(async (options: { wpPath?: string; wpUrl?: string; ssh?: string; strict?: boolean; out?: string }) => {
-    try {
-      const context = await collect({
-        collector: 'wp-cli',
-        wpPath: options.wpPath,
-        wpUrl: options.wpUrl,
-        ssh: options.ssh,
-        strict: options.strict,
-      });
-      await writeOutput(stringifyManifest(context), options.out);
-      process.exitCode = options.strict && hasActionableWarnings(allWarnings(context)) ? 1 : 0;
-    } catch (error) {
-      console.error(`wesper collect: ${message(error)}`);
-      process.exitCode = 3;
-    }
-  });
+  .action(
+    async (options: {
+      wpPath?: string;
+      wpUrl?: string;
+      rest?: boolean;
+      wpUser?: string;
+      ssh?: string;
+      strict?: boolean;
+      out?: string;
+    }) => {
+      try {
+        if (options.rest && (options.wpPath || options.ssh)) {
+          throw new Error('--rest cannot be combined with --wp-path or --ssh.');
+        }
+        // The Application Password is read only from WP_API_PASSWORD, never an argv flag,
+        // so the secret never lands in shell history or the process arg list.
+        const context = options.rest
+          ? await collect({
+              collector: 'rest',
+              wpUrl: options.wpUrl ?? process.env.WP_API_URL,
+              wpUser: options.wpUser ?? process.env.WP_API_USERNAME,
+              wpAppPassword: process.env.WP_API_PASSWORD,
+              strict: options.strict,
+            })
+          : await collect({
+              collector: 'wp-cli',
+              wpPath: options.wpPath,
+              wpUrl: options.wpUrl,
+              ssh: options.ssh,
+              strict: options.strict,
+            });
+        await writeOutput(stringifyManifest(context), options.out);
+        process.exitCode = options.strict && hasActionableWarnings(allWarnings(context)) ? 1 : 0;
+      } catch (error) {
+        console.error(`wesper collect: ${message(error)}`);
+        process.exitCode = 3;
+      }
+    },
+  );
 
 program
   .command('validate <manifest>')

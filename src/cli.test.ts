@@ -32,6 +32,17 @@ describe('CLI summarize', () => {
     });
   });
 
+  it('rejects combining --rest with WP-CLI transport options', async () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'collect', '--rest', '--wp-path', '/tmp/wp'],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.stderr).toContain('--rest cannot be combined with --wp-path or --ssh.');
+  });
+
   it('prints nested binding warnings during validate and exits nonzero', async () => {
     const manifestPath = await writeFixture({
       bindings: {

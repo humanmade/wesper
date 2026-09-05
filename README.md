@@ -4,7 +4,7 @@
 
 [![license](https://img.shields.io/github/license/humanmade/wesper.svg)](./LICENSE)
 
-> Status: V1 scaffold. The manifest schema, WP-CLI collector, validation, and summary surfaces are the first build.
+> Status: V1 scaffold. The manifest schema, WP-CLI and REST collectors, validation, and summary surfaces are the first build.
 
 Agents and tools generate content for WordPress, but they generate it *blind* — inventing
 block attributes, binding to meta keys that do not exist, ignoring the theme's tokens,
@@ -47,8 +47,10 @@ consumer can share — instead of each agent re-deriving brittle introspection o
 
 - **One normalized manifest.** A stable, versioned `site.context.json` schema, so every
   consumer reads one known shape instead of hand-rolling `wp eval` scrapes.
-- **A transport ladder, not one method.** V1 collects via WP-CLI (local/SSH) or a
-  hand-authored fixture (tests/CI). The schema is independent of how it was gathered.
+- **A transport ladder, not one method.** V1 collects via WP-CLI (local/SSH), the REST API
+  (Application Password over core WordPress endpoints), or a hand-authored fixture (tests/CI).
+  The REST collector is vendor-neutral — core endpoints only, no consumer-specific logic in core.
+  The schema is independent of how it was gathered.
 - **Binding-ready.** Surfaces registered Block Bindings sources and per-post-type fields with
   ready-to-use binding `args`, so consumers do not need source-specific argument logic.
 - **Provenance + content hash.** Every manifest is stamped (`collectedAt`, collector,
@@ -79,6 +81,7 @@ Consumers must not infer source-specific argument names such as `field` for `cor
 ```sh
 wesper collect --wp-path <path> --out site.context.json   # local WP-CLI
 wesper collect --ssh <target> --wp-path <path> --out site.context.json
+wesper collect --rest --wp-url <site-root> --wp-user <user> --out site.context.json   # REST (App Password via WP_API_PASSWORD)
 wesper validate site.context.json
 wesper summarize site.context.json
 ```

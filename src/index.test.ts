@@ -169,6 +169,38 @@ describe('sourceHash and redaction', () => {
 
     expect(redacted).toEqual({ nested: { appPassword: '[REDACTED]', safe: 'ok' } });
   });
+
+  it('redacts camelCase credential keys the boundary heuristic missed', () => {
+    const redacted = redactSecrets({
+      clientSecret: 's',
+      secretKey: 'k',
+      privateKey: 'p',
+      passwordHash: 'h',
+      authorizationHeader: 'a',
+      accessToken: 't',
+      apiKey: 'i',
+    });
+
+    expect(redacted).toEqual({
+      clientSecret: '[REDACTED]',
+      secretKey: '[REDACTED]',
+      privateKey: '[REDACTED]',
+      passwordHash: '[REDACTED]',
+      authorizationHeader: '[REDACTED]',
+      accessToken: '[REDACTED]',
+      apiKey: '[REDACTED]',
+    });
+  });
+
+  it('does not over-redact benign keys that merely contain "key" or "token"', () => {
+    const redacted = redactSecrets({
+      tokens: { primary: '#fff' },
+      slugKey: 'hero',
+      monkey: 'ok',
+    });
+
+    expect(redacted).toEqual({ tokens: { primary: '#fff' }, slugKey: 'hero', monkey: 'ok' });
+  });
 });
 
 describe('theme tokens', () => {
@@ -265,7 +297,9 @@ describe('package metadata', () => {
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
     const publicMetadata = `${packageJson.description} ${packageJson.keywords.join(' ')} ${readme}`;
 
-    expect(publicMetadata).not.toMatch(/\b(?:abilities|mcp|acf|rest|diff|freshness|ttl)\b/i);
+    // REST shipped in this build (it is now a supported collector), so it is no longer
+    // a deferred surface. The rest remain V1.1-deferred and must not be advertised as V1.
+    expect(publicMetadata).not.toMatch(/\b(?:abilities|mcp|acf|diff|freshness|ttl)\b/i);
   });
 });
 

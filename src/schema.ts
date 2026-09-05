@@ -71,7 +71,7 @@ export const siteContextSchema = z
     provenance: z
       .object({
         collectedAt: z.string().datetime(),
-        collector: z.enum(['wp-cli', 'fixture']),
+        collector: z.enum(['wp-cli', 'rest', 'fixture']),
         collectorVersion: z.string().min(1),
         sourceHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
         partial: z.boolean().default(false),
@@ -94,7 +94,7 @@ export const siteContextSchema = z
         version: z.string().optional(),
         isBlockTheme: z.boolean().optional(),
         themeJsonHash: z.string().optional(),
-        settingsOrigin: z.enum(['merged', 'theme']).default('merged'),
+        settingsOrigin: z.enum(['merged', 'theme', 'custom']).default('merged'),
         tokens: z
           .object({
             colors: z.array(tokenSchema).default([]),

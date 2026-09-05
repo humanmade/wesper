@@ -11,7 +11,7 @@ import type {
 export const CONTEXT_VERSION = 1 as const;
 export const SCHEMA_URL = 'https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json' as const;
 
-export type CollectorKind = 'wp-cli' | 'fixture';
+export type CollectorKind = 'wp-cli' | 'rest' | 'fixture';
 export type Environment = 'local' | 'development' | 'staging' | 'production' | 'unknown';
 export type WarningSeverity = 'info' | 'warning' | 'error';
 
@@ -33,6 +33,8 @@ export interface CollectOptions {
   collector?: CollectorKind;
   wpPath?: string;
   wpUrl?: string;
+  wpUser?: string;
+  wpAppPassword?: string;
   ssh?: string;
   strict?: boolean;
   wpBinary?: string;
