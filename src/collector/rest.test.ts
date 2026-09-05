@@ -82,6 +82,29 @@ describe('REST collector', () => {
     expect(context.blocks?.types.map((block) => block.name)).toEqual(['acme/widget', 'core/paragraph']);
     expect(context.contentModel?.postTypes[0]?.fields.map((field) => field.name)).toEqual(['date', 'link', 'modified']);
     expect(context.patterns?.items.map((item) => item.name)).toEqual(['core/hero']);
+    // Several REST surfaces are intentionally unavailable over core endpoints.
+    // Their informational warnings still make the evidence partial.
+    expect(context.provenance.partial).toBe(true);
+  });
+
+  it('rejects strict REST collection when binding evidence is unavailable', async () => {
+    stubFetch(defaultRoutes);
+
+    await expect(
+      collect({ collector: 'rest', wpUrl: 'https://example.test', strict: true }),
+    ).rejects.toMatchObject({
+      code: 'WESPER_STRICT_POLICY',
+      message: expect.stringContaining('bindings (unavailable)'),
+    });
+  });
+
+  it('raises a transport error when no REST endpoint can be reached', async () => {
+    stubFetch(() => undefined);
+
+    await expect(collect({ collector: 'rest', wpUrl: 'https://example.test' })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT',
+      message: expect.stringContaining('could not communicate'),
+    });
   });
 
   it('stamps settingsOrigin as custom because REST returns the customization layer', async () => {

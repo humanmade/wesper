@@ -86,6 +86,28 @@ wesper validate site.context.json
 wesper summarize site.context.json
 ```
 
+### Exit status
+
+`collect` may successfully produce a partial manifest unless `--strict` is set; inspect
+`provenance.partial` and the warnings when using its output. The CLI uses these status codes
+consistently:
+
+| Status | Meaning |
+| --- | --- |
+| `0` | The requested operation completed. A non-strict collection may still be partial. |
+| `1` | Strict collection policy rejected incomplete evidence, or manifest validation found invalid or actionable evidence. |
+| `2` | Command usage or local input error (for example incompatible options, an unreadable manifest, or an unsupported summary format). |
+| `3` | The collector could not communicate with or execute its source transport (REST or WP-CLI). |
+
+Strict collection requires complete block-type, binding, and content-model evidence—the
+minimum needed to safely construct bindings. `complete` includes a source that was read and
+found empty; `partial` and `unavailable` never satisfy that policy, even when their explanatory
+warning is informational. Warnings may declare their coverage as `complete`, `partial`, or
+`unavailable`; an undeclared warning is conservatively treated as partial evidence.
+
+For programmatic collection, the library exposes the corresponding error codes:
+`WESPER_STRICT_POLICY`, `WESPER_USAGE`, and `WESPER_TRANSPORT`.
+
 ## License
 
 GPL-2.0-or-later.

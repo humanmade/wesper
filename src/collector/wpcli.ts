@@ -1,13 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
-import type { CollectOptions, SiteContext } from '../types.js';
+import { UsageError, type CollectOptions, type SiteContext } from '../types.js';
 
 const execFileAsync = promisify(execFile);
 
 export async function collectWpCli(options: CollectOptions): Promise<SiteContext> {
   if (!options.wpPath && !options.ssh) {
-    throw new Error('WP-CLI collector requires --wp-path or --ssh.');
+    throw new UsageError('WP-CLI collector requires --wp-path or --ssh.');
   }
 
   const wpBinary = options.wpBinary ?? 'wp';
@@ -53,12 +53,13 @@ export function collectorSourceForTests(): string {
 const PHP_COLLECTOR = String.raw`
 $warnings = array();
 
-function wesper_warning($code, $surface, $message, $severity = 'warning') {
+function wesper_warning($code, $surface, $message, $severity = 'warning', $coverage = 'partial') {
     return array(
         'code' => $code,
         'severity' => $severity,
         'surface' => $surface,
         'message' => $message,
+        'coverage' => $coverage,
     );
 }
 
@@ -125,7 +126,7 @@ if ($bindings_available) {
         );
     }
 } else {
-    $warnings[] = wesper_warning('bindings.unavailable', 'bindings', 'Block Bindings are unavailable before WordPress 6.5.');
+    $warnings[] = wesper_warning('bindings.unavailable', 'bindings', 'Block Bindings are unavailable before WordPress 6.5.', 'warning', 'unavailable');
 }
 
 $core_supported_attributes = array(
@@ -178,7 +179,7 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
         );
     }
     if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
-        $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info');
+        $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info', 'complete');
     }
     $post_types[] = array(
         'name' => $post_type_name,

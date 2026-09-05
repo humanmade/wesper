@@ -11,20 +11,36 @@ import { collectRest } from './collector/rest.js';
 import { collectWpCli } from './collector/wpcli.js';
 import { redactSecrets } from './redact.js';
 import { siteContextSchema } from './schema.js';
-import { actionableWarnings, allWarnings } from './warnings.js';
-import type { CollectOptions, SiteContext, ValidationIssue, ValidationResult } from './types.js';
+import { allWarnings, strictCoverageGaps } from './warnings.js';
+import {
+  CollectionError,
+  CollectionTransportError,
+  StrictCollectionError,
+  UsageError,
+  type CollectOptions,
+  type SiteContext,
+  type ValidationIssue,
+  type ValidationResult,
+} from './types.js';
 
 export async function collect(options: CollectOptions): Promise<SiteContext> {
-  const collector = options.collector ?? 'wp-cli';
-  switch (collector) {
-    case 'wp-cli':
-      return enforceStrict(await collectWpCli({ ...options, collector }), options);
-    case 'rest':
-      return enforceStrict(await collectRest({ ...options, collector }), options);
-    case 'fixture':
-      throw new Error('Fixture collection is represented by validate() on a manifest file.');
-    default:
-      throw new Error(`Unsupported collector: ${String(collector)}`);
+  try {
+    const collector = options.collector ?? 'wp-cli';
+    switch (collector) {
+      case 'wp-cli':
+        return enforceStrict(await collectWpCli({ ...options, collector }), options);
+      case 'rest':
+        return enforceStrict(await collectRest({ ...options, collector }), options);
+      case 'fixture':
+        throw new UsageError('Fixture collection is represented by validate() on a manifest file.');
+      default:
+        throw new UsageError(`Unsupported collector: ${String(collector)}`);
+    }
+  } catch (error) {
+    if (error instanceof CollectionError) {
+      throw error;
+    }
+    throw new CollectionTransportError(`Collector failed: ${message(error)}`);
   }
 }
 
@@ -48,12 +64,16 @@ export function validate(manifest: unknown): ValidationResult {
 }
 
 function enforceStrict(context: SiteContext, options: CollectOptions): SiteContext {
-  const warnings = actionableWarnings(allWarnings(context));
-  if (options.strict && (context.provenance.partial || warnings.length > 0)) {
-    const surfaces = warnings.map((warning) => warning.surface).join(', ') || 'provenance.partial';
-    throw new Error(`Strict collection failed because the manifest is partial or has actionable warnings: ${surfaces}`);
+  const evidenceGaps = strictCoverageGaps(context);
+  if (options.strict && evidenceGaps.length > 0) {
+    const incomplete = evidenceGaps.map((coverage) => `${coverage.surface} (${coverage.status})`);
+    throw new StrictCollectionError(`Strict collection failed because required evidence is incomplete: ${incomplete.join(', ')}.`);
   }
   return context;
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function issuesFromZod(error: ZodError): ValidationIssue[] {

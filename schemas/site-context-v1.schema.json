@@ -496,6 +496,14 @@
         "surface": {
           "type": "string",
           "minLength": 1
+        },
+        "coverage": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "unavailable"
+          ]
         }
       },
       "required": [

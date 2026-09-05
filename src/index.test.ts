@@ -275,6 +275,61 @@ describe('summary', () => {
 
     expect(formatSummaryMarkdown(context as SiteContext)).toContain('- Patterns: absent (see warnings)');
   });
+
+  it('separates complete, partial, and unavailable evidence from its counts', () => {
+    const manifest = fixture({
+      blocks: { types: [] },
+      bindings: {
+        available: true,
+        sources: [],
+        supportedAttributes: {},
+        warnings: [
+          {
+            code: 'bindings.supported_attributes_partial',
+            severity: 'info',
+            surface: 'bindings.supportedAttributes',
+            message: 'Only some supported attributes were reported.',
+            coverage: 'partial',
+          },
+        ],
+      },
+      contentModel: { postTypes: [] },
+      warnings: [
+        {
+          code: 'patterns.rest_unavailable',
+          severity: 'info',
+          surface: 'patterns',
+          message: 'Patterns could not be collected.',
+          coverage: 'unavailable',
+        },
+      ],
+    });
+    delete manifest.patterns;
+    const context = validate(manifest).context;
+    expect(context).toBeDefined();
+
+    const summary = summarize(context as SiteContext);
+
+    expect(summary.counts).toMatchObject({ blockTypes: 0, bindingSources: 0, postTypes: 0, patterns: 'absent' });
+    expect(summary.coverage).toMatchObject({
+      blocks: 'complete',
+      bindings: 'partial',
+      contentModel: 'complete',
+      patterns: 'unavailable',
+    });
+    expect(summary.supportedWork).toContain('Use only the reported binding sources and supported block attributes; binding evidence is incomplete.');
+    expect(summary.unknownWork).toContain(
+      'Complete binding work is not supported until binding source and supported-attribute evidence is complete.',
+    );
+    expect(summary.unknownWork).toContain('Block pattern evidence is unavailable; do not assume the surface is empty.');
+
+    const markdown = formatSummaryMarkdown(context as SiteContext);
+    expect(markdown).toContain('## Evidence');
+    expect(markdown).toContain('### Coverage');
+    expect(markdown).toContain('- bindings: partial');
+    expect(markdown).toContain('### Supported Work');
+    expect(markdown).toContain('### Remaining Unknowns');
+  });
 });
 
 describe('manifest serialization', () => {

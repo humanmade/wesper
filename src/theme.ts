@@ -59,6 +59,7 @@ export function themeWarnings(settings: unknown): ContextWarning[] {
         severity: 'warning',
         surface: 'theme.settings',
         message: 'Theme settings could not be normalized.',
+        coverage: 'partial',
       },
     ];
   }
