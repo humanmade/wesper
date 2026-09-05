@@ -42,12 +42,27 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     return url.toString();
   };
   const slices: Slice[] = [
-    { surface: 'site', async run() { const index = await readJson(endpoint('', 'name')) as { name?: string }; return { site: { url: base, name: index.name ?? '', environment: 'unknown', isMultisite: false } }; } },
+    { surface: 'site', async run() {
+      const index = record(await readJson(endpoint('', 'name')));
+      if (!index) throw malformed();
+      return { site: { url: base, name: typeof index.name === 'string' ? index.name : '', environment: 'unknown', isMultisite: false } };
+    } },
     { surface: 'theme', async run() {
       const themes = await readJson(endpoint('wp/v2/themes', 'stylesheet,template,name,version,is_block_theme', { status: 'active' })) as Array<{ stylesheet?: string; template?: string; name?: { rendered?: string } | string; version?: string; is_block_theme?: boolean }>;
-      if (!Array.isArray(themes)) throw malformed(); const theme = themes[0]; let settings: unknown;
-      if (theme?.stylesheet) { const styles = await readJson(endpoint(`wp/v2/global-styles/themes/${encodeURIComponent(theme.stylesheet)}`, 'settings', { context: auth ? 'edit' : 'view' })); const styleRecord = record(styles); if (!styleRecord) throw malformed(); settings = styleRecord.settings; }
-      return { theme: { stylesheet: theme?.stylesheet, template: theme?.template, name: themeName(theme?.name), version: theme?.version, isBlockTheme: theme?.is_block_theme, settings } };
+      const theme = Array.isArray(themes) ? themes[0] : undefined;
+      if (!theme || !record(theme)) throw malformed();
+      const metadata = { stylesheet: theme.stylesheet, template: theme.template, name: themeName(theme.name), version: theme.version, isBlockTheme: theme.is_block_theme };
+      if (!theme.stylesheet) return { theme: metadata };
+      try {
+        const styleRecord = record(await readJson(endpoint(`wp/v2/global-styles/themes/${encodeURIComponent(theme.stylesheet)}`, 'settings', { context: auth ? 'edit' : 'view' })));
+        if (!styleRecord || !hasOwn(styleRecord, 'settings') || styleRecord.settings === null) throw malformed();
+        return { theme: { ...metadata, settings: styleRecord.settings } };
+      } catch (error) {
+        // The active-theme endpoint remains useful evidence if its dependent
+        // customization request is unavailable. Preserve it with a scoped gap.
+        warnings.push(sliceWarning('theme.settings', error));
+        return { theme: metadata };
+      }
     } },
     { surface: 'blocks', async run() {
       const blocks = await readJson(endpoint('wp/v2/block-types', 'name,api_version,title,category,attributes,supports')) as Array<Record<string, unknown>>;
@@ -125,3 +140,4 @@ function siteRoot(wpUrl: string): string { const base = wpUrl.replace(/\/+$/, ''
 function requireSecureTransport(wpUrl: string): void { const url = new URL(wpUrl); const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1'; if (url.protocol !== 'https:' && !local) throw new UsageError('REST collector refuses to send an Application Password over a non-HTTPS connection. Use an https:// URL (localhost excepted).'); }
 function themeName(name: { rendered?: string } | string | undefined): string | undefined { return typeof name === 'string' ? name : name?.rendered; }
 function record(value: unknown): Record<string, any> | undefined { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : undefined; }
+function hasOwn(value: Record<string, unknown>, key: string): boolean { return Object.prototype.hasOwnProperty.call(value, key); }

@@ -15,8 +15,8 @@ export function normalizeCollectorOutput(
   // normalization step operate on the exact content we may return.
   const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
   const warnings = warningArray(redactedRaw.warnings);
-  const themeRaw = completeRecordSection(redactedRaw, 'theme', ['settings']);
-  if (themeRaw) {
+  const themeRaw = themeSection(redactedRaw);
+  if (themeRaw && hasOwn(themeRaw, 'settings')) {
     const settings = themeRaw.settings;
     warnings.push(...themeWarnings(settings));
   }
@@ -182,6 +182,12 @@ function completeRecordSection(
 ): Record<string, unknown> | undefined {
   const value = recordOrUndefined(raw[section]);
   return value && requiredKeys.every((key) => hasOwn(value, key)) ? value : undefined;
+}
+
+function themeSection(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const value = recordOrUndefined(raw.theme);
+  const evidenceKeys = ['settings', 'stylesheet', 'template', 'name', 'version', 'isBlockTheme'];
+  return value && evidenceKeys.some((key) => hasOwn(value, key)) ? value : undefined;
 }
 
 function recordWithRecordArray(

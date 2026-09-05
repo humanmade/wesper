@@ -3,6 +3,7 @@ import type {
   blockTypeSchema,
   bindingFieldSchema,
   bindingSourceSchema,
+  collectionMetricsSchema,
   contextWarningSchema,
   imageSizeSchema,
   pluginSchema,
@@ -78,6 +79,7 @@ export type CollectionFailureReason =
   | 'process_failed';
 
 export type ContextWarning = z.infer<typeof contextWarningSchema>;
+export type CollectionMetrics = z.infer<typeof collectionMetricsSchema>;
 export type Plugin = z.infer<typeof pluginSchema>;
 export type BlockType = z.infer<typeof blockTypeSchema>;
 export type ImageSize = z.infer<typeof imageSizeSchema>;

@@ -15,6 +15,12 @@ const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
 export const warningSeveritySchema = z.enum(['info', 'warning', 'error']);
 export const warningCoverageSchema = z.enum(['complete', 'partial', 'unavailable']);
 
+export const collectionMetricsSchema = z.object({
+  latencyMs: z.number().int().nonnegative(),
+  responseBytes: z.number().int().nonnegative(),
+  requests: z.number().int().positive(),
+});
+
 export const contextWarningSchema = z.object({
   code: z.string().min(1),
   severity: warningSeveritySchema,
@@ -130,6 +136,7 @@ export const siteContextSchema = z
         collectorVersion: z.string().min(1),
         sourceHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
         partial: z.boolean().default(false),
+        collectionMetrics: collectionMetricsSchema.optional(),
       })
       .passthrough(),
     wordpress: z

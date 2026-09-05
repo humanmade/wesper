@@ -118,6 +118,20 @@ describe('REST collector', () => {
     expect(context.theme?.settingsOrigin).toBe('custom');
   });
 
+  it('publishes bounded collection metrics through the manifest contract', async () => {
+    stubFetch(defaultRoutes);
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.provenance.collectionMetrics).toMatchObject({
+      latencyMs: expect.any(Number),
+      responseBytes: expect.any(Number),
+      requests: 6,
+    });
+    expect(context.provenance.collectionMetrics?.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(context.provenance.collectionMetrics?.responseBytes).toBeGreaterThan(0);
+  });
+
   it('normalizes a wp-url that already includes the REST entry point', async () => {
     stubFetch(defaultRoutes);
 
@@ -176,6 +190,52 @@ describe('REST collector', () => {
     expect(context.warnings.map((warning) => warning.code)).toContain('patterns.rest_unavailable');
     expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
     expect(context.blocks?.types.length).toBe(2);
+  });
+
+  it('retains active-theme metadata when its dependent settings request fails', async () => {
+    stubFetch((url) => url.includes('/wp/v2/global-styles/themes/')
+      ? { body: {}, ok: false, status: 403 }
+      : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
+
+    expect(context.theme).toMatchObject({ stylesheet: 'twentytwentyfive', name: 'Twenty Twenty-Five' });
+    expect(context.theme?.settings).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'theme.settings.rest_unavailable', reason: 'permission_denied', coverage: 'unavailable',
+    }));
+  });
+
+  it('classifies a null site index as malformed evidence', async () => {
+    stubFetch((url) => new URL(url).pathname === '/wp-json/' ? { body: null } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'site.rest_unavailable', reason: 'malformed_response',
+    }));
+  });
+
+  it.each([null, []])('classifies an empty active-theme response %j as malformed evidence', async (body) => {
+    stubFetch((url) => url.includes('/wp/v2/themes') ? { body } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.theme).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'theme.rest_unavailable', reason: 'malformed_response',
+    }));
+  });
+
+  it.each([null, {}])('classifies an empty theme-settings response %j while retaining theme metadata', async (body) => {
+    stubFetch((url) => url.includes('/wp/v2/global-styles/themes/') ? { body } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.theme?.stylesheet).toBe('twentytwentyfive');
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'theme.settings.rest_unavailable', reason: 'malformed_response',
+    }));
   });
 
   it('cancels an HTTP error body before failing its slice', async () => {
