@@ -63,7 +63,7 @@ export function validate(manifest: unknown): ValidationResult {
     if (error instanceof RedactionError) {
       return {
         ok: false,
-        errors: [{ path: '<root>', message: error.message }],
+        errors: [{ code: 'redaction.failed', path: '<root>', message: error.message }],
         warnings: [],
       };
     }
@@ -273,7 +273,19 @@ function message(error: unknown): string {
 
 function issuesFromZod(error: ZodError): ValidationIssue[] {
   return error.issues.map((issue) => ({
+    code: relationshipIssueCode(issue) ?? `schema.${issue.code}`,
     path: issue.path.join('.'),
     message: issue.message,
   }));
+}
+
+function relationshipIssueCode(issue: unknown): string | undefined {
+  if (!issue || typeof issue !== 'object' || !('params' in issue)) {
+    return undefined;
+  }
+  const params = issue.params;
+  if (!params || typeof params !== 'object' || !('code' in params)) {
+    return undefined;
+  }
+  return typeof params.code === 'string' ? params.code : undefined;
 }

@@ -27,9 +27,18 @@ export const contextWarningSchema = z.object({
 });
 
 export const validationIssueSchema = z.object({
+  code: z.string().min(1),
   path: z.string(),
   message: z.string(),
 });
+
+/**
+ * V1 registry identifiers are opaque WordPress identifiers. They must be
+ * present and whitespace-free, but are not constrained to one vendor's
+ * namespace grammar so registered third-party values remain portable.
+ */
+const identifierSchema = z.string().min(1).regex(/^\S+$/, 'Identifier must not contain whitespace.');
+const nonBlankStringSchema = z.string().min(1).regex(/\S/, 'Value must not be blank.');
 
 export const tokenSchema = z
   .object({
@@ -41,30 +50,63 @@ export const tokenSchema = z
 
 export const bindingSourceSchema = z
   .object({
-    name: z.string().min(1),
+    name: identifierSchema,
     label: z.string().nullable().optional(),
-    usesContext: z.array(z.string()).default([]),
+    usesContext: z.array(identifierSchema).default([]),
     argsSchema: jsonValueSchema.nullable().default(null),
   })
-  .passthrough();
+  .catchall(jsonValueSchema);
 
 export const bindingFieldSchema = z
   .object({
-    name: z.string().min(1),
-    key: z.string().min(1).optional(),
-    source: z.string().min(1),
+    name: identifierSchema,
+    key: identifierSchema.optional(),
+    source: identifierSchema,
     args: z.record(z.string(), jsonValueSchema),
     type: z.string().optional(),
     single: z.boolean().optional(),
     showInRest: z.boolean().optional(),
-    bindable: z.boolean().default(true),
+    // A field is only binding-ready when the collector explicitly says so.
+    // Treating omission as true could make consumers write unsupported bindings.
+    bindable: z.boolean(),
   })
-  .passthrough();
+  .catchall(jsonValueSchema);
+
+export const pluginSchema = z
+  .object({
+    slug: identifierSchema,
+    name: nonBlankStringSchema,
+    version: z.string().optional(),
+    active: z.boolean(),
+    networkActive: z.boolean().optional(),
+  })
+  .catchall(jsonValueSchema);
+
+export const blockTypeSchema = z
+  .object({
+    name: identifierSchema,
+    apiVersion: z.number().int().positive().nullable().optional(),
+    title: z.string().nullable().optional(),
+    category: z.string().nullable().optional(),
+    attributes: z.record(z.string(), jsonValueSchema),
+    supports: z.record(z.string(), jsonValueSchema),
+    source: z.enum(['core', 'plugin']),
+  })
+  .catchall(jsonValueSchema);
+
+export const imageSizeSchema = z
+  .object({
+    name: identifierSchema,
+    width: z.number().int().nonnegative(),
+    height: z.number().int().nonnegative(),
+    crop: z.boolean(),
+  })
+  .catchall(jsonValueSchema);
 
 export const patternSchema = z
   .object({
     // Pattern names are reusable registry identifiers, not collection offsets.
-    name: z.string().min(1).regex(/\S/, 'Pattern name must not be blank.'),
+    name: identifierSchema,
   })
   .catchall(jsonValueSchema);
 
@@ -118,10 +160,10 @@ export const siteContextSchema = z
       })
       .passthrough()
       .optional(),
-    plugins: z.array(z.record(z.string(), jsonValueSchema)).optional(),
+    plugins: z.array(pluginSchema).optional(),
     blocks: z
       .object({
-        types: z.array(z.record(z.string(), jsonValueSchema)).default([]),
+        types: z.array(blockTypeSchema).default([]),
       })
       .passthrough()
       .optional(),
@@ -129,7 +171,7 @@ export const siteContextSchema = z
       .object({
         available: z.boolean().default(false),
         sources: z.array(bindingSourceSchema).default([]),
-        supportedAttributes: z.record(z.string(), z.array(z.string())).default({}),
+        supportedAttributes: z.record(identifierSchema, z.array(identifierSchema)).default({}),
         warnings: z.array(contextWarningSchema).default([]),
       })
       .passthrough()
@@ -140,11 +182,11 @@ export const siteContextSchema = z
           .array(
             z
               .object({
-                name: z.string().min(1),
+                name: identifierSchema,
                 label: z.string().optional(),
                 public: z.boolean().optional(),
                 showInRest: z.boolean().optional(),
-                taxonomies: z.array(z.string()).default([]),
+                taxonomies: z.array(identifierSchema).default([]),
                 fields: z.array(bindingFieldSchema).default([]),
               })
               .passthrough(),
@@ -161,14 +203,197 @@ export const siteContextSchema = z
       .optional(),
     media: z
       .object({
-        imageSizes: z.array(z.record(z.string(), jsonValueSchema)).default([]),
+        imageSizes: z.array(imageSizeSchema).default([]),
         maxUploadSize: z.number().optional(),
       })
       .passthrough()
       .optional(),
     warnings: z.array(contextWarningSchema),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine(validateManifestRelationships);
+
+type RelationshipManifest = {
+  plugins?: Array<{ slug: string }>;
+  blocks?: { types: Array<{ name: string }> };
+  bindings?: {
+    available: boolean;
+    sources: Array<{ name: string }>;
+    supportedAttributes: Record<string, string[]>;
+  };
+  contentModel?: {
+    postTypes: Array<{
+      name: string;
+      fields: Array<{ name: string; key?: string; source: string; args: Record<string, unknown>; bindable: boolean }>;
+    }>;
+  };
+  patterns?: { items: Array<{ name: string }> };
+  media?: { imageSizes: Array<{ name: string }> };
+};
+
+const CORE_POST_DATA_FIELDS = new Set(['date', 'modified', 'link']);
+
+/**
+ * JSON Schema cannot express uniqueness across array members or references
+ * between fields and registered binding sources. Keep those V1 guarantees in
+ * the runtime schema so every parse path receives the same contract.
+ */
+function validateManifestRelationships(value: RelationshipManifest, ctx: z.RefinementCtx): void {
+  uniqueIdentifiers(ctx, value.plugins, 'slug', ['plugins'], 'plugin slug');
+  uniqueIdentifiers(ctx, value.blocks?.types, 'name', ['blocks', 'types'], 'block name');
+  uniqueIdentifiers(ctx, value.bindings?.sources, 'name', ['bindings', 'sources'], 'binding source name');
+  uniqueIdentifiers(ctx, value.patterns?.items, 'name', ['patterns', 'items'], 'pattern name');
+  uniqueIdentifiers(ctx, value.media?.imageSizes, 'name', ['media', 'imageSizes'], 'image-size name');
+  uniqueIdentifiers(ctx, value.contentModel?.postTypes, 'name', ['contentModel', 'postTypes'], 'post-type name');
+
+  for (const [postTypeIndex, postType] of value.contentModel?.postTypes.entries() ?? []) {
+    const fieldPath = ['contentModel', 'postTypes', postTypeIndex, 'fields'] as const;
+    uniqueIdentifiers(ctx, postType.fields, 'name', fieldPath, 'field name');
+    uniqueIdentifiers(ctx, postType.fields, 'key', fieldPath, 'field key');
+
+    for (const [fieldIndex, field] of postType.fields.entries()) {
+      validateCoreSourceArguments(ctx, field, [...fieldPath, fieldIndex]);
+    }
+  }
+
+  const bindings = value.bindings;
+  if (!bindings) {
+    return;
+  }
+
+  if (!bindings.available) {
+    if (bindings.sources.length > 0) {
+      addRelationshipIssue(
+        ctx,
+        ['bindings', 'sources'],
+        'bindings.unavailable_evidence',
+        'bindings.available is false, so bindings.sources must be empty.',
+      );
+    }
+    if (Object.keys(bindings.supportedAttributes).length > 0) {
+      addRelationshipIssue(
+        ctx,
+        ['bindings', 'supportedAttributes'],
+        'bindings.unavailable_evidence',
+        'bindings.available is false, so bindings.supportedAttributes must be empty.',
+      );
+    }
+  }
+
+  const sourceNames = new Set(bindings.sources.map((source) => source.name));
+  for (const [postTypeIndex, postType] of value.contentModel?.postTypes.entries() ?? []) {
+    for (const [fieldIndex, field] of postType.fields.entries()) {
+      const fieldPath = ['contentModel', 'postTypes', postTypeIndex, 'fields', fieldIndex] as const;
+      if (!bindings.available && field.bindable) {
+        addRelationshipIssue(
+          ctx,
+          [...fieldPath, 'bindable'],
+          'bindings.unavailable_field',
+          'Field is bindable even though bindings.available is false.',
+        );
+      }
+      if (bindings.available && field.bindable && !sourceNames.has(field.source)) {
+        addRelationshipIssue(
+          ctx,
+          [...fieldPath, 'source'],
+          'bindings.missing_source',
+          `Bindable field references unregistered binding source "${field.source}".`,
+        );
+      }
+    }
+  }
+}
+
+function uniqueIdentifiers<T extends Record<string, unknown>>(
+  ctx: z.RefinementCtx,
+  items: readonly T[] | undefined,
+  key: keyof T & string,
+  basePath: readonly (string | number)[],
+  label: string,
+): void {
+  const firstIndex = new Map<string, number>();
+  for (const [index, item] of items?.entries() ?? []) {
+    const value = item[key];
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const first = firstIndex.get(value);
+    if (first === undefined) {
+      firstIndex.set(value, index);
+      continue;
+    }
+    addRelationshipIssue(
+      ctx,
+      [...basePath, index, key],
+      'manifest.duplicate_identifier',
+      `Duplicate ${label} "${value}"; first declared at ${pathText([...basePath, first, key])}.`,
+    );
+  }
+}
+
+function validateCoreSourceArguments(
+  ctx: z.RefinementCtx,
+  field: { name: string; key?: string; source: string; args: Record<string, unknown> },
+  fieldPath: readonly (string | number)[],
+): void {
+  const argumentName = field.source === 'core/post-data'
+    ? 'field'
+    : field.source === 'core/post-meta'
+      ? 'key'
+      : undefined;
+  if (!argumentName) {
+    return;
+  }
+
+  const argument = field.args[argumentName];
+  const argumentPath = [...fieldPath, 'args', argumentName];
+  if (typeof argument !== 'string' || !/^\S+$/.test(argument)) {
+    addRelationshipIssue(
+      ctx,
+      argumentPath,
+      'bindings.invalid_core_source_argument',
+      `Fields from ${field.source} require a non-blank args.${argumentName} string.`,
+    );
+    return;
+  }
+
+  if (field.source === 'core/post-data' && !CORE_POST_DATA_FIELDS.has(argument)) {
+    addRelationshipIssue(
+      ctx,
+      argumentPath,
+      'bindings.invalid_core_source_argument',
+      `args.field for core/post-data must be one of ${[...CORE_POST_DATA_FIELDS].join(', ')}.`,
+    );
+  }
+
+  const expectedArgument = field.key ?? field.name;
+  if (argument !== expectedArgument) {
+    addRelationshipIssue(
+      ctx,
+      argumentPath,
+      'bindings.invalid_core_source_argument',
+      `args.${argumentName} must match the field key or name ("${expectedArgument}").`,
+    );
+  }
+}
+
+function addRelationshipIssue(
+  ctx: z.RefinementCtx,
+  path: readonly (string | number)[],
+  code: string,
+  message: string,
+): void {
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: [...path],
+    message,
+    params: { code },
+  });
+}
+
+function pathText(path: readonly (string | number)[]): string {
+  return path.join('.');
+}
 
 const summaryCountSchema = z.union([z.number(), z.literal('absent')]);
 

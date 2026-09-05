@@ -1,8 +1,11 @@
 import type * as z from 'zod/v4';
 import type {
+  blockTypeSchema,
   bindingFieldSchema,
   bindingSourceSchema,
   contextWarningSchema,
+  imageSizeSchema,
+  pluginSchema,
   siteContextSchema,
   summarySchema,
   validationIssueSchema,
@@ -10,6 +13,16 @@ import type {
 
 export const CONTEXT_VERSION = 1 as const;
 export const SCHEMA_URL = 'https://humanmade.github.io/wesper/schemas/site-context-v1.schema.json' as const;
+
+/**
+ * V1 accepts additive JSON extension properties, while its documented records
+ * and relationships are validated. Consumers must ignore extensions they do
+ * not understand so future V1-compatible manifests remain readable.
+ */
+export const V1_COMPATIBILITY = {
+  extensionProperties: 'preserve-and-ignore',
+  knownRecords: 'validate',
+} as const;
 
 export type CollectorKind = 'wp-cli' | 'rest' | 'fixture';
 export type Environment = 'local' | 'development' | 'staging' | 'production' | 'unknown';
@@ -52,6 +65,9 @@ export class CollectionTransportError extends CollectionError {
 }
 
 export type ContextWarning = z.infer<typeof contextWarningSchema>;
+export type Plugin = z.infer<typeof pluginSchema>;
+export type BlockType = z.infer<typeof blockTypeSchema>;
+export type ImageSize = z.infer<typeof imageSizeSchema>;
 export type BindingSource = z.infer<typeof bindingSourceSchema>;
 export type BindingField = z.infer<typeof bindingFieldSchema>;
 export type SiteContext = z.infer<typeof siteContextSchema>;

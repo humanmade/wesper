@@ -103,6 +103,21 @@ those manifests (or validate them and recompute the fingerprint) before using th
 as an integrity assertion. The hash continues to represent redacted manifest content with the
 same volatile provenance fields excluded.
 
+## V1 compatibility contract
+
+V1 is forward-compatible for additive JSON properties: producers may preserve extension
+properties and consumers must ignore properties they do not understand. The named V1 registry
+records are not extension bags, however. Plugins require `slug`, `name`, and `active`; block
+types require their identifier, attributes, supports, and source; image sizes require their
+identifier and dimensions; and each field must explicitly declare `bindable`.
+
+Validation also enforces V1 relationships that JSON Schema cannot represent: registry identifiers
+must be unique, bindable fields must reference a reported binding source, core source arguments
+must use their documented `field` or `key` argument, and `bindings.available: false` cannot
+coexist with binding evidence. These checks return path-specific, machine-readable validation
+issues. A change that requires a consumer to reinterpret an existing known V1 field requires a
+new `contextVersion`, rather than silently changing V1 semantics.
+
 ## Consumer contract: the binding join
 
 Binding consumers join two manifest slices before writing `metadata.bindings`:

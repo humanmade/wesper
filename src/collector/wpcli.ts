@@ -132,9 +132,11 @@ foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name =
 }
 
 $binding_sources = array();
+$binding_source_names = array();
 $bindings_available = function_exists('get_all_registered_block_bindings_sources');
 if ($bindings_available) {
     foreach (get_all_registered_block_bindings_sources() as $name => $source) {
+        $binding_source_names[] = $name;
         $binding_sources[] = array(
             'name' => $name,
             'label' => isset($source->label) ? $source->label : null,
@@ -171,12 +173,17 @@ if (function_exists('get_block_bindings_supported_attributes')) {
 $post_types = array();
 foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_object) {
     $rest_visible_meta_count = 0;
-    $fields = array(
-        array('name' => 'date', 'key' => 'date', 'source' => 'core/post-data', 'args' => array('field' => 'date'), 'type' => 'string', 'bindable' => true),
-        array('name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data', 'args' => array('field' => 'modified'), 'type' => 'string', 'bindable' => true),
-        array('name' => 'link', 'key' => 'link', 'source' => 'core/post-data', 'args' => array('field' => 'link'), 'type' => 'string', 'bindable' => true),
-    );
-    $registered_meta = function_exists('get_registered_meta_keys') ? get_registered_meta_keys('post', $post_type_name) : array();
+    $fields = array();
+    if (in_array('core/post-data', $binding_source_names, true)) {
+        $fields = array(
+            array('name' => 'date', 'key' => 'date', 'source' => 'core/post-data', 'args' => array('field' => 'date'), 'type' => 'string', 'bindable' => true),
+            array('name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data', 'args' => array('field' => 'modified'), 'type' => 'string', 'bindable' => true),
+            array('name' => 'link', 'key' => 'link', 'source' => 'core/post-data', 'args' => array('field' => 'link'), 'type' => 'string', 'bindable' => true),
+        );
+    }
+    $registered_meta = in_array('core/post-meta', $binding_source_names, true) && function_exists('get_registered_meta_keys')
+        ? get_registered_meta_keys('post', $post_type_name)
+        : array();
     foreach ($registered_meta as $meta_key => $args) {
         $show_in_rest = !empty($args['show_in_rest']);
         $protected = isset($args['protected']) ? (bool) $args['protected'] : strpos((string) $meta_key, '_') === 0;
@@ -195,8 +202,10 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
             'bindable' => true,
         );
     }
-    if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
-        $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info', 'complete');
+    if (in_array('core/post-meta', $binding_source_names, true)) {
+        if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
+            $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info', 'complete');
+        }
     }
     $post_types[] = array(
         'name' => $post_type_name,

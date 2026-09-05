@@ -326,7 +326,7 @@ describe('WP-CLI collector', () => {
         supportedAttributes: { 'example/block': ['z', 'a'] },
       },
       contentModel: {
-        postTypes: [{ name: 'post', fields: [{ name: 'example', source: 'example/source', args: {} }] }],
+        postTypes: [{ name: 'post', fields: [{ name: 'example', source: 'example/source', args: {}, bindable: true }] }],
       },
       patterns: { items: [] },
       media: {},
@@ -360,12 +360,12 @@ describe('WP-CLI collector', () => {
         },
       },
       plugins: reverse
-        ? [{ slug: 'z/z.php', name: 'Zed' }, { slug: 'a/a.php', name: 'Aye' }]
-        : [{ slug: 'a/a.php', name: 'Aye' }, { slug: 'z/z.php', name: 'Zed' }],
+        ? [{ slug: 'z/z.php', name: 'Zed', active: true }, { slug: 'a/a.php', name: 'Aye', active: true }]
+        : [{ slug: 'a/a.php', name: 'Aye', active: true }, { slug: 'z/z.php', name: 'Zed', active: true }],
       blocks: {
         types: reverse
-          ? [{ name: 'z/block', attributes: {}, supports: {} }, { name: 'a/block', attributes: {}, supports: {} }]
-          : [{ name: 'a/block', attributes: {}, supports: {} }, { name: 'z/block', attributes: {}, supports: {} }],
+          ? [{ name: 'z/block', attributes: {}, supports: {}, source: 'plugin' }, { name: 'a/block', attributes: {}, supports: {}, source: 'plugin' }]
+          : [{ name: 'a/block', attributes: {}, supports: {}, source: 'plugin' }, { name: 'z/block', attributes: {}, supports: {}, source: 'plugin' }],
       },
       bindings: {
         available: true,
@@ -382,12 +382,12 @@ describe('WP-CLI collector', () => {
             taxonomies: reverse ? ['z', 'a'] : ['a', 'z'],
             fields: reverse
               ? [
-                  { name: 'z', source: 'example/source', args: {} },
-                  { name: 'a', source: 'example/source', args: {} },
+                  { name: 'z', source: 'a/source', args: {}, bindable: true },
+                  { name: 'a', source: 'a/source', args: {}, bindable: true },
                 ]
               : [
-                  { name: 'a', source: 'example/source', args: {} },
-                  { name: 'z', source: 'example/source', args: {} },
+                  { name: 'a', source: 'a/source', args: {}, bindable: true },
+                  { name: 'z', source: 'a/source', args: {}, bindable: true },
                 ],
           },
         ],
@@ -470,8 +470,8 @@ describe('WP-CLI collector', () => {
             showInRest: true,
             taxonomies: ['a', 'Z', '_internal'],
             fields: [
-              { name: 'a', source: 'core/post-data', args: { field: 'a' }, bindable: true },
-              { name: 'Z', source: 'core/post-data', args: { field: 'Z' }, bindable: true },
+              { name: 'date', source: 'core/post-data', args: { field: 'date' }, bindable: true },
+              { name: 'link', source: 'core/post-data', args: { field: 'link' }, bindable: true },
             ],
           },
           { name: 'Z', label: 'Z', public: true, showInRest: true, taxonomies: [], fields: [] },
@@ -487,7 +487,7 @@ describe('WP-CLI collector', () => {
     expect(context.bindings?.supportedAttributes['core/a']).toEqual(['Z', '_internal', 'a']);
     expect(context.contentModel?.postTypes.map((postType) => postType.name)).toEqual(['Z', '_internal', 'a']);
     expect(context.contentModel?.postTypes[2]?.taxonomies).toEqual(['Z', '_internal', 'a']);
-    expect(context.contentModel?.postTypes[2]?.fields.map((field) => field.name)).toEqual(['Z', 'a']);
+    expect(context.contentModel?.postTypes[2]?.fields.map((field) => field.name)).toEqual(['date', 'link']);
   });
 
   it('keeps collector post-data fields aligned with WordPress core bindings', () => {
@@ -537,7 +537,10 @@ function wpOutput(): Record<string, unknown> {
     blocks: { types: [{ name: 'core/paragraph', attributes: {}, supports: {}, source: 'core' }] },
     bindings: {
       available: true,
-      sources: [{ name: 'core/post-meta', label: 'Post Meta', usesContext: ['postId', 'postType'], argsSchema: null }],
+      sources: [
+        { name: 'core/post-data', label: 'Post Data', usesContext: ['postId', 'postType'], argsSchema: null },
+        { name: 'core/post-meta', label: 'Post Meta', usesContext: ['postId', 'postType'], argsSchema: null },
+      ],
       supportedAttributes: { 'core/paragraph': ['content'] },
       warnings: [],
     },

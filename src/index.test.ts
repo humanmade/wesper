@@ -38,6 +38,108 @@ describe('validation', () => {
     );
   });
 
+  it('requires complete plugin, block, image-size, and field records', () => {
+    const result = validate(
+      fixture({
+        plugins: [{ slug: '   ' }],
+        blocks: { types: [{ name: 'core/paragraph' }] },
+        media: { imageSizes: [{ name: 'large', width: 1024, height: 1024 }] },
+        contentModel: {
+          postTypes: [{ name: 'post', fields: [{ name: 'date', source: 'core/post-data', args: { field: 'date' } }] }],
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((error) => error.path)).toEqual(
+      expect.arrayContaining([
+        'plugins.0.slug',
+        'plugins.0.name',
+        'plugins.0.active',
+        'blocks.types.0.attributes',
+        'blocks.types.0.supports',
+        'blocks.types.0.source',
+        'media.imageSizes.0.crop',
+        'contentModel.postTypes.0.fields.0.bindable',
+      ]),
+    );
+  });
+
+  it('rejects duplicate V1 identifiers with the duplicate path and code', () => {
+    const result = validate(
+      fixture({
+        plugins: [
+          { slug: 'example/example.php', name: 'Example', active: true },
+          { slug: 'example/example.php', name: 'Example copy', active: false },
+        ],
+        blocks: {
+          types: [
+            { name: 'core/paragraph', attributes: {}, supports: {}, source: 'core' },
+            { name: 'core/paragraph', attributes: {}, supports: {}, source: 'core' },
+          ],
+        },
+        media: {
+          imageSizes: [
+            { name: 'large', width: 1024, height: 1024, crop: false },
+            { name: 'large', width: 512, height: 512, crop: false },
+          ],
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'manifest.duplicate_identifier', path: 'plugins.1.slug' }),
+        expect.objectContaining({ code: 'manifest.duplicate_identifier', path: 'blocks.types.1.name' }),
+        expect.objectContaining({ code: 'manifest.duplicate_identifier', path: 'media.imageSizes.1.name' }),
+      ]),
+    );
+  });
+
+  it('validates binding sources, core binding arguments, and availability relationships', () => {
+    const missingSource = validate(
+      fixture({
+        bindings: {
+          available: true,
+          sources: [{ name: 'core/post-data', usesContext: [], argsSchema: null }],
+          supportedAttributes: {},
+        },
+      }),
+    );
+    expect(missingSource.errors).toContainEqual(
+      expect.objectContaining({ code: 'bindings.missing_source', path: 'contentModel.postTypes.0.fields.1.source' }),
+    );
+
+    const invalidCoreArguments = validate(
+      fixture({
+        contentModel: {
+          postTypes: [
+            {
+              name: 'post',
+              fields: [{ name: 'date', source: 'core/post-data', args: { field: 'title' }, bindable: true }],
+            },
+          ],
+        },
+      }),
+    );
+    expect(invalidCoreArguments.errors).toContainEqual(
+      expect.objectContaining({
+        code: 'bindings.invalid_core_source_argument',
+        path: 'contentModel.postTypes.0.fields.0.args.field',
+      }),
+    );
+
+    const unavailable = validate(fixture({ bindings: { available: false } }));
+    expect(unavailable.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'bindings.unavailable_evidence', path: 'bindings.sources' }),
+        expect.objectContaining({ code: 'bindings.unavailable_evidence', path: 'bindings.supportedAttributes' }),
+        expect.objectContaining({ code: 'bindings.unavailable_field', path: 'contentModel.postTypes.0.fields.0.bindable' }),
+      ]),
+    );
+  });
+
   it('includes nested binding warnings in validation results', () => {
     const result = validate(
       fixture({
@@ -532,7 +634,7 @@ describe('summary', () => {
 
     expect(summary.counts).toMatchObject({
       blockTypes: 1,
-      bindingSources: 1,
+      bindingSources: 2,
       postTypes: 1,
       bindableFields: 2,
       patterns: 1,
@@ -721,7 +823,10 @@ function fixture(overrides: Record<string, unknown> = {}): Record<string, unknow
     blocks: { types: [{ name: 'core/paragraph', attributes: {}, supports: {}, source: 'core' }] },
     bindings: {
       available: true,
-      sources: [{ name: 'core/post-meta', label: 'Post Meta', usesContext: ['postId', 'postType'], argsSchema: null }],
+      sources: [
+        { name: 'core/post-data', label: 'Post Data', usesContext: ['postId', 'postType'], argsSchema: null },
+        { name: 'core/post-meta', label: 'Post Meta', usesContext: ['postId', 'postType'], argsSchema: null },
+      ],
       supportedAttributes: { 'core/paragraph': ['content'] },
       warnings: [],
     },
