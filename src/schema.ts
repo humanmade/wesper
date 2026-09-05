@@ -24,6 +24,7 @@ export const contextWarningSchema = z.object({
   // changes the coverage of its surface. Omission is intentionally handled
   // conservatively by coverageFor(), rather than guessed from the code.
   coverage: warningCoverageSchema.optional(),
+  reason: z.string().min(1).optional(),
 });
 
 export const validationIssueSchema = z.object({

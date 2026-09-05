@@ -58,11 +58,24 @@ export class StrictCollectionError extends CollectionError {
 
 /** A collector could not execute or return a valid manifest. */
 export class CollectionTransportError extends CollectionError {
-  constructor(message: string) {
+  constructor(message: string, readonly reason?: CollectionFailureReason) {
     super(message, 'WESPER_TRANSPORT');
     this.name = 'CollectionTransportError';
   }
 }
+
+/** A safe operational reason suitable for callers and CLI diagnostics. */
+export type CollectionFailureReason =
+  | 'cancelled'
+  | 'deadline_exceeded'
+  | 'timeout'
+  | 'route_unavailable'
+  | 'authentication_failed'
+  | 'permission_denied'
+  | 'response_too_large'
+  | 'malformed_response'
+  | 'transport_failed'
+  | 'process_failed';
 
 export type ContextWarning = z.infer<typeof contextWarningSchema>;
 export type Plugin = z.infer<typeof pluginSchema>;
@@ -90,6 +103,14 @@ export interface CollectOptions {
   ssh?: string;
   strict?: boolean;
   wpBinary?: string;
+  /** Cancel an in-flight collection. */
+  signal?: AbortSignal;
+  /** Maximum wall-clock time for the entire collection, in milliseconds. */
+  timeoutMs?: number;
+  /** Maximum simultaneous independent REST requests. */
+  restConcurrency?: number;
+  /** Maximum bytes accepted from one REST response. */
+  maxResponseBytes?: number;
 }
 
 export interface WpCliExecOptions extends CollectOptions {

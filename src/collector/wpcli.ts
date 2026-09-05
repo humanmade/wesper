@@ -2,7 +2,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
 import { assertNoUrlCredentials } from './safe.js';
-import { UsageError, type CollectOptions, type SiteContext } from '../types.js';
+import { collectionControl } from './control.js';
+import { CollectionTransportError, UsageError, type CollectOptions, type SiteContext } from '../types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -16,16 +17,24 @@ export async function collectWpCli(options: CollectOptions): Promise<SiteContext
 
   const wpBinary = options.wpBinary ?? 'wp';
   const args = wpArgs(options, ['eval', PHP_COLLECTOR]);
+  const control = collectionControl(options);
   let stdout: string;
   try {
     ({ stdout } = await execFileAsync(wpBinary, args, {
       encoding: 'utf8',
       maxBuffer: 1024 * 1024 * 20,
+      signal: control.signal,
     }));
-  } catch {
+    control.throwIfAborted();
+  } catch (error) {
+    if (error instanceof CollectionTransportError) {
+      throw error;
+    }
     // execFile errors include the complete command line, which may have come
     // from untrusted CLI input. Keep the process error out of manifests/logs.
     throw new Error('WP-CLI collector failed to run. Check WP-CLI availability and collector options.');
+  } finally {
+    control.dispose();
   }
 
   let raw: Record<string, unknown>;

@@ -44,6 +44,7 @@ export function normalizeCollectorOutput(
       collectorVersion: opts.collectorVersion,
       sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
     partial: false,
+      ...collectorMetrics(redactedRaw.provenance),
     },
     warnings,
   };
@@ -138,6 +139,12 @@ export function normalizeCollectorOutput(
       sourceHash: sourceHash(redacted),
     },
   };
+}
+
+function collectorMetrics(value: unknown): Record<string, unknown> {
+  const provenance = recordOrUndefined(value);
+  const metrics = provenance && recordOrUndefined(provenance.collectionMetrics);
+  return metrics ? { collectionMetrics: metrics } : {};
 }
 
 function warningArray(value: unknown): ContextWarning[] {
