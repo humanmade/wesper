@@ -76,6 +76,33 @@ Traversal is bounded to 64 nested containers and 100,000 object members or array
 exported `RedactionError` for the same condition. This prevents malformed input from causing
 uncontrolled recursion while retaining ordinary schema fields and design-token metadata.
 
+## Hash and validation contract
+
+`provenance.sourceHash` is the SHA-256 fingerprint of the final collected document. Before it is
+calculated, Wesper redacts credential-shaped values, applies schema defaults, validates the
+document, and sorts only collections whose order has no meaning (such as plugins, block types,
+and registered image sizes). `collectedAt` and `sourceHash` itself are excluded. Arrays whose
+order is content, including `theme.settings` arrays, are preserved. Canonical JSON is RFC 8785
+(JCS, UTF-8): object names are ordered by UTF-16 code units and finite JSON numbers use the
+ECMAScript JSON representation.
+
+`validate()` and `wesper validate` establish **schema validity**, redact returned data, and apply
+schema defaults. They deliberately do **not** establish **hash integrity**: a structurally valid
+manifest may contain a stale or altered `provenance.sourceHash`. Consumers that require integrity
+must make the explicit comparison after validation:
+
+```ts
+const result = validate(manifest);
+const hasIntegrity = Boolean(
+  result.ok && result.context && sourceHash(result.context) === result.context.provenance.sourceHash,
+);
+```
+
+Collector builds that predate this contract hashed before defaults were materialized. Re-collect
+those manifests (or validate them and recompute the fingerprint) before using their source hash
+as an integrity assertion. The hash continues to represent redacted manifest content with the
+same volatile provenance fields excluded.
+
 ## Consumer contract: the binding join
 
 Binding consumers join two manifest slices before writing `metadata.bindings`:
@@ -98,6 +125,28 @@ wesper collect --rest --wp-url <site-root> --wp-user <user> --out site.context.j
 wesper validate site.context.json
 wesper summarize site.context.json
 ```
+
+### Exit status
+
+`collect` may successfully produce a partial manifest unless `--strict` is set; inspect
+`provenance.partial` and the warnings when using its output. The CLI uses these status codes
+consistently:
+
+| Status | Meaning |
+| --- | --- |
+| `0` | The requested operation completed. A non-strict collection may still be partial. |
+| `1` | Strict collection policy rejected incomplete evidence, or manifest validation found invalid or actionable evidence. |
+| `2` | Command usage or local input error (for example incompatible options, an unreadable manifest, or an unsupported summary format). |
+| `3` | The collector could not communicate with or execute its source transport (REST or WP-CLI). |
+
+Strict collection requires complete block-type, binding, and content-model evidence—the
+minimum needed to safely construct bindings. `complete` includes a source that was read and
+found empty; `partial` and `unavailable` never satisfy that policy, even when their explanatory
+warning is informational. Warnings may declare their coverage as `complete`, `partial`, or
+`unavailable`; an undeclared warning is conservatively treated as partial evidence.
+
+For programmatic collection, the library exposes the corresponding error codes:
+`WESPER_STRICT_POLICY`, `WESPER_USAGE`, and `WESPER_TRANSPORT`.
 
 ## License
 

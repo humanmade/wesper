@@ -374,9 +374,16 @@
           "type": "array",
           "items": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
             },
+            "required": [
+              "name"
+            ],
             "additionalProperties": {
               "$ref": "#/definitions/__schema1"
             }
@@ -496,6 +503,14 @@
         "surface": {
           "type": "string",
           "minLength": 1
+        },
+        "coverage": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "unavailable"
+          ]
         }
       },
       "required": [

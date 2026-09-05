@@ -3,7 +3,15 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
 import { sanitizeErrorMessage } from './collector/safe.js';
+import { UsageError } from './types.js';
 import { allWarnings, hasActionableWarnings } from './warnings.js';
+
+const EXIT = {
+  success: 0,
+  policyOrValidation: 1,
+  usageOrInput: 2,
+  transportOrCollection: 3,
+} as const;
 
 const program = new Command();
 
@@ -34,7 +42,7 @@ program
     }) => {
       try {
         if (options.rest && (options.wpPath || options.ssh)) {
-          throw new Error('--rest cannot be combined with --wp-path or --ssh.');
+          throw new UsageError('--rest cannot be combined with --wp-path or --ssh.');
         }
         // The Application Password is read only from WP_API_PASSWORD, never an argv flag,
         // so the secret never lands in shell history or the process arg list.
@@ -54,17 +62,19 @@ program
               strict: options.strict,
             });
         await writeOutput(stringifyManifest(context), options.out);
-        process.exitCode = options.strict && hasActionableWarnings(allWarnings(context)) ? 1 : 0;
+        // A non-strict collection can legitimately return partial evidence. The manifest
+        // records that fact; a nonzero status is reserved for a strict-policy failure.
+        process.exitCode = EXIT.success;
       } catch (error) {
         console.error(`wesper collect: ${message(error)}`);
-        process.exitCode = 3;
+        process.exitCode = collectExitCode(error);
       }
     },
   );
 
 program
   .command('validate <manifest>')
-  .description('Validate a manifest against the wesper schema')
+  .description('Validate a manifest against the wesper schema (does not verify source-hash integrity)')
   .action(async (manifestPath: string) => {
     try {
       const manifest = await readJson(manifestPath);
@@ -73,16 +83,16 @@ program
         for (const issue of result.errors) {
           console.error(`${issue.path || '<root>'}: ${issue.message}`);
         }
-        process.exitCode = 1;
+        process.exitCode = EXIT.policyOrValidation;
         return;
       }
       for (const warning of result.warnings) {
         console.error(`${warning.surface}: [${warning.code}] ${warning.message}`);
       }
-      process.exitCode = hasActionableWarnings(result.warnings) ? 1 : 0;
+      process.exitCode = hasActionableWarnings(result.warnings) ? EXIT.policyOrValidation : EXIT.success;
     } catch (error) {
       console.error(`wesper validate: ${message(error)}`);
-      process.exitCode = 2;
+      process.exitCode = EXIT.usageOrInput;
     }
   });
 
@@ -94,7 +104,7 @@ program
     try {
       if (options.format !== 'json' && options.format !== 'md') {
         console.error(`wesper summarize: unsupported format "${options.format}". Expected "json" or "md".`);
-        process.exitCode = 2;
+        process.exitCode = EXIT.usageOrInput;
         return;
       }
       const manifest = await readJson(manifestPath);
@@ -103,17 +113,17 @@ program
         for (const issue of result.errors) {
           console.error(`${issue.path || '<root>'}: ${issue.message}`);
         }
-        process.exitCode = 1;
+        process.exitCode = EXIT.policyOrValidation;
         return;
       }
       const output = options.format === 'json'
         ? `${JSON.stringify(summarize(result.context), null, 2)}\n`
         : formatSummaryMarkdown(result.context);
       process.stdout.write(output);
-      process.exitCode = hasActionableWarnings(allWarnings(result.context)) ? 1 : 0;
+      process.exitCode = hasActionableWarnings(allWarnings(result.context)) ? EXIT.policyOrValidation : EXIT.success;
     } catch (error) {
       console.error(`wesper summarize: ${message(error)}`);
-      process.exitCode = 2;
+      process.exitCode = EXIT.usageOrInput;
     }
   });
 
@@ -122,10 +132,20 @@ program
   .description('Diff two manifests (deferred to V1.1)')
   .action(() => {
     console.error('wesper diff is deferred to V1.1.');
-    process.exitCode = 2;
+    process.exitCode = EXIT.usageOrInput;
   });
 
-await program.parseAsync();
+// Commander renders its own diagnostics. Prevent it from exiting directly so
+// parsing failures use the same documented usage status as collector input.
+program.exitOverride();
+for (const command of program.commands) {
+  command.exitOverride();
+}
+try {
+  await program.parseAsync();
+} catch (error) {
+  process.exitCode = isCommanderSuccess(error) ? EXIT.success : EXIT.usageOrInput;
+}
 
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, 'utf8')) as unknown;
@@ -142,4 +162,35 @@ async function writeOutput(output: string, out?: string): Promise<void> {
 
 function message(error: unknown): string {
   return sanitizeErrorMessage(error);
+}
+
+/**
+ * Preserve the public library error contract at the process boundary without
+ * requiring callers to depend on a particular Error subclass or package copy.
+ */
+function collectExitCode(error: unknown): number {
+  switch (errorCode(error)) {
+    case 'WESPER_STRICT_POLICY':
+      return EXIT.policyOrValidation;
+    case 'WESPER_USAGE':
+      return EXIT.usageOrInput;
+    case 'WESPER_TRANSPORT':
+      return EXIT.transportOrCollection;
+    default:
+      // Collector implementations may throw native process/network errors. They
+      // are operational collection failures unless they opt into a typed code.
+      return EXIT.transportOrCollection;
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string') {
+    return error.code;
+  }
+  return undefined;
+}
+
+function isCommanderSuccess(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === 'commander.helpDisplayed' || code === 'commander.version';
 }

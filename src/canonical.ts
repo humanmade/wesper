@@ -1,11 +1,20 @@
 import { createHash } from 'node:crypto';
 import { redactSecrets } from './redact.js';
 
+/**
+ * Serialize a JSON value using RFC 8785 (JSON Canonicalization Scheme).
+ *
+ * JavaScript's JSON.stringify() is deliberately used for primitive strings and
+ * numbers: its ECMAScript number rendering is what RFC 8785 specifies. Object
+ * members are emitted directly, rather than rebuilding an object and passing it
+ * to JSON.stringify(), because JavaScript enumerates integer-like keys in
+ * numeric order (for example "2" before "10") rather than JCS order.
+ */
 export function canonicalize(value: unknown): string {
   // Canonicalization is a public package boundary too. Work only from the
   // bounded, data-only copy so it cannot recurse indefinitely or turn a
   // credential-bearing URL into a stable leaked representation.
-  return canonicalizeRedacted(redactSecrets(value));
+  return serializeJson(redactSecrets(value), new Set<object>());
 }
 
 export function sourceHash(value: unknown): string {
@@ -13,12 +22,8 @@ export function sourceHash(value: unknown): string {
   // Redact before cloning or recursively sorting: callers can pass arbitrary
   // manifest-shaped input and no raw credential should reach the hash input.
   const redacted = redactSecrets(value);
-  hash.update(canonicalizeRedacted(withoutVolatileProvenance(redacted)));
+  hash.update(serializeJson(withoutVolatileProvenance(redacted), new Set<object>()));
   return `sha256:${hash.digest('hex')}`;
-}
-
-function canonicalizeRedacted(value: unknown): string {
-  return JSON.stringify(sortJson(value));
 }
 
 export function withoutVolatileProvenance(value: unknown): unknown {
@@ -35,19 +40,74 @@ export function withoutVolatileProvenance(value: unknown): unknown {
   return clone;
 }
 
-function sortJson(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sortJson(item));
+function serializeJson(value: unknown, ancestors: Set<object>): string {
+  switch (typeof value) {
+    case 'string':
+      assertWellFormedUnicode(value);
+      return JSON.stringify(value);
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new TypeError('RFC 8785 canonical JSON only supports finite numbers.');
+      }
+      return JSON.stringify(value);
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'object':
+      if (value === null) {
+        return 'null';
+      }
+      if (ancestors.has(value)) {
+        throw new TypeError('Cannot canonicalize a cyclic value.');
+      }
+      ancestors.add(value);
+      try {
+        if (Array.isArray(value)) {
+          // Array.from deliberately visits sparse slots, which are not JSON
+          // values and therefore fail canonicalization rather than becoming an
+          // ambiguous empty element.
+          return `[${Array.from(value, (item) => serializeJson(item, ancestors)).join(',')}]`;
+        }
+        if (!isJsonRecord(value)) {
+          throw new TypeError('RFC 8785 canonicalization requires JSON values.');
+        }
+        const record = value as Record<string, unknown>;
+        return `{${Object.keys(record)
+          // JCS sorts names as arrays of UTF-16 code units. String comparison in
+          // ECMAScript has precisely those semantics and is locale-independent.
+          .sort(compareCodeUnits)
+          .map((key) => {
+            assertWellFormedUnicode(key);
+            return `${JSON.stringify(key)}:${serializeJson(record[key], ancestors)}`;
+          })
+          .join(',')}}`;
+      } finally {
+        ancestors.delete(value);
+      }
+    default:
+      throw new TypeError('RFC 8785 canonicalization requires JSON values.');
   }
+}
 
-  if (!value || typeof value !== 'object') {
-    return value;
+function isJsonRecord(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function assertWellFormedUnicode(value: string): void {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
+        throw new TypeError('RFC 8785 canonical JSON does not permit lone surrogate code points.');
+      }
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      throw new TypeError('RFC 8785 canonical JSON does not permit lone surrogate code points.');
+    }
   }
-
-  return Object.fromEntries(
-    Object.entries(value)
-      // RFC 8785/JCS orders object member names by Unicode code point, not locale collation.
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .map(([key, nested]) => [key, sortJson(nested)]),
-  );
 }

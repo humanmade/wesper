@@ -45,9 +45,9 @@ export function parseThemeJsonSettings(settings: unknown): NormalizedThemeTokens
     }
   }
 
-  tokens.colors.sort(bySlug);
-  tokens.spacing.sort(bySlug);
-  tokens.typography.sort(bySlug);
+  tokens.colors.sort(byToken);
+  tokens.spacing.sort(byToken);
+  tokens.typography.sort(byToken);
   return tokens;
 }
 
@@ -59,6 +59,7 @@ export function themeWarnings(settings: unknown): ContextWarning[] {
         severity: 'warning',
         surface: 'theme.settings',
         message: 'Theme settings could not be normalized.',
+        coverage: 'partial',
       },
     ];
   }
@@ -79,6 +80,17 @@ function presetEntries<T>(collection: PresetCollection<T> | undefined): T[] {
   return Object.values(collection).flatMap((value) => (Array.isArray(value) ? value : []));
 }
 
-function bySlug(left: { slug: string }, right: { slug: string }): number {
-  return left.slug < right.slug ? -1 : left.slug > right.slug ? 1 : 0;
+function byToken(
+  left: { slug: string; name?: string; value: string },
+  right: { slug: string; name?: string; value: string },
+): number {
+  return (
+    compareStrings(left.slug, right.slug) ||
+    compareStrings(left.name ?? '', right.name ?? '') ||
+    compareStrings(left.value, right.value)
+  );
+}
+
+function compareStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

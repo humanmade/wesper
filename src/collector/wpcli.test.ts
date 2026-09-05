@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
-import { collect, stringifyManifest } from '../index.js';
+import { normalizeCollectorOutput } from './normalize.js';
+import { collect, sourceHash, stringifyManifest, validate } from '../index.js';
+import { coverageFor, strictCoverageGaps } from '../warnings.js';
 
 let mockedOutput = wpOutput();
 let mockedError: Error | null = null;
@@ -18,6 +20,7 @@ describe('WP-CLI collector', () => {
     mockedOutput = wpOutput();
     mockedError = null;
     mockedStdout = undefined;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -39,6 +42,7 @@ describe('WP-CLI collector', () => {
     );
     expect(context.bindings?.supportedAttributes['core/paragraph']).toEqual(['content']);
     expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
+    expect(context.provenance.partial).toBe(false);
   });
 
   it('rejects URL userinfo before it enters WP-CLI argv', async () => {
@@ -61,7 +65,10 @@ describe('WP-CLI collector', () => {
       failure = error as Error;
     }
 
-    expect(failure?.message).toBe('WP-CLI collector failed to run. Check WP-CLI availability and collector options.');
+    expect(failure).toMatchObject({
+      code: 'WESPER_TRANSPORT',
+      message: 'Collector failed: WP-CLI collector failed to run. Check WP-CLI availability and collector options.',
+    });
     expect(failure?.message).not.toContain(password);
   });
 
@@ -76,26 +83,30 @@ describe('WP-CLI collector', () => {
       failure = error as Error;
     }
 
-    expect(failure?.message).toBe('WP-CLI collector returned malformed JSON.');
+    expect(failure).toMatchObject({
+      code: 'WESPER_TRANSPORT',
+      message: 'Collector failed: WP-CLI collector returned malformed JSON.',
+    });
     expect(failure?.message).not.toContain(password);
   });
 
-  it('rejects actionable partial output in strict mode', async () => {
+  it('rejects unclassified binding evidence warnings in strict mode', async () => {
     mockedOutput = {
       ...wpOutput(),
       warnings: [
         {
-          code: 'collector.partial',
-          severity: 'warning',
+          code: 'bindings.read_failed',
+          severity: 'info',
           surface: 'bindings',
-          message: 'Partial binding collection.',
+          message: 'Binding source evidence could not be read.',
         },
       ],
     };
 
-    await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp', strict: true })).rejects.toThrow(
-      'Strict collection failed',
-    );
+    await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp', strict: true })).rejects.toMatchObject({
+      code: 'WESPER_STRICT_POLICY',
+      message: expect.stringContaining('bindings (partial)'),
+    });
     await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp' })).resolves.toMatchObject({
       provenance: { partial: true },
     });
@@ -124,6 +135,120 @@ describe('WP-CLI collector', () => {
       surface: 'patterns',
       message: 'Patterns could not be collected.',
     });
+  });
+
+  it('does not normalize malformed collector data as successful empty evidence', () => {
+    const context = normalizeCollectorOutput(
+      {
+        site: { environment: 'local', isMultisite: false },
+        blocks: {},
+        bindings: { available: true },
+        contentModel: { postTypes: [{ name: 'post' }] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.blocks).toBeUndefined();
+    expect(context.bindings).toBeUndefined();
+    expect(context.contentModel).toBeUndefined();
+    expect(context.provenance.partial).toBe(true);
+    expect(context.warnings.map((warning) => warning.code)).toEqual(
+      expect.arrayContaining(['blocks.invalid_evidence', 'bindings.invalid_evidence', 'contentModel.invalid_evidence']),
+    );
+  });
+
+  it('does not default missing nested binding-source evidence to empty/null', () => {
+    const context = normalizeCollectorOutput(
+      {
+        site: { environment: 'local', isMultisite: false },
+        blocks: { types: [] },
+        bindings: {
+          available: true,
+          sources: [{ name: 'acme/incomplete-source' }],
+          supportedAttributes: {},
+          warnings: [],
+        },
+        contentModel: { postTypes: [] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.bindings).toBeUndefined();
+    expect(context.warnings).toContainEqual({
+      code: 'bindings.invalid_evidence',
+      severity: 'warning',
+      surface: 'bindings',
+      coverage: 'partial',
+      message: expect.any(String),
+    });
+    expect(context.provenance.partial).toBe(true);
+    expect(coverageFor(context, ['bindings'])).toMatchObject([{ status: 'partial' }]);
+    expect(strictCoverageGaps(context)).toContainEqual(expect.objectContaining({ surface: 'bindings', status: 'partial' }));
+  });
+
+  it('uses names from WordPress indexed registry records', async () => {
+    mockedOutput = {
+      ...wpOutput(),
+      // WP_Block_Patterns_Registry::get_all_registered() returns an indexed list.
+      patterns: {
+        items: [
+          { name: 'example/banner', title: 'Banner' },
+          { name: 'plugin/call-to-action', title: 'Call to action' },
+        ],
+      },
+    };
+
+    const context = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    const source = collectorSourceForTests();
+
+    expect(context.patterns?.items.map((item) => item.name)).toEqual(['example/banner', 'plugin/call-to-action']);
+    expect(source).toContain('get_all_registered() as $pattern)');
+    expect(source).toContain("'name' => $pattern['name']");
+    expect(source).toContain("!is_string($pattern['name'])");
+    expect(source).toContain("'patterns.invalid_identifier'");
+    expect(source).not.toContain('get_all_registered() as $name => $pattern)');
+  });
+
+  it('preserves the same pattern identifiers as REST for equivalent patterns', async () => {
+    const patterns = [
+      { name: 'example/banner', title: 'Banner', categories: ['featured'], blockTypes: ['core/group'], postTypes: ['page'] },
+      { name: 'plugin/call-to-action', title: 'Call to action', categories: [], blockTypes: [], postTypes: [] },
+    ];
+    mockedOutput = { ...wpOutput(), patterns: { items: patterns } };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL) => {
+        const url = String(input);
+        let body: unknown;
+        if (url.endsWith('/wp-json/')) {
+          body = { name: 'Example' };
+        } else if (url.includes('/wp/v2/themes')) {
+          body = [];
+        } else if (url.includes('/wp/v2/block-types')) {
+          body = [];
+        } else if (url.includes('/wp/v2/types')) {
+          body = {};
+        } else if (url.includes('/wp/v2/block-patterns/patterns')) {
+          body = patterns.map((pattern) => ({
+            name: pattern.name,
+            title: pattern.title,
+            categories: pattern.categories,
+            block_types: pattern.blockTypes,
+            post_types: pattern.postTypes,
+          }));
+        } else {
+          return Promise.reject(new Error(`unexpected fetch: ${url}`));
+        }
+        return Promise.resolve({ ok: true, json: async () => body } as Response);
+      }),
+    );
+
+    const wpCli = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    const rest = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(rest.patterns?.items.map((item) => item.name)).toEqual(wpCli.patterns?.items.map((item) => item.name));
   });
 
   it('redacts secrets from all normalized collector surfaces before returning a manifest', async () => {
@@ -158,7 +283,8 @@ describe('WP-CLI collector', () => {
   });
 
   it('sanitises credentials embedded in collector warning messages', async () => {
-    const password = 'synthetic-warning-app-password';
+    const camelCasedPassword = 'synthetic-warning-app-password';
+    const groupedPassword = 'abcd efgh ijkl mnop qrst uvwx';
     const authorization = 'Basic synthetic-warning-authorization';
     mockedOutput = {
       ...wpOutput(),
@@ -167,7 +293,7 @@ describe('WP-CLI collector', () => {
           code: 'collector.partial',
           severity: 'warning',
           surface: 'site',
-          message: `Application Password: ${password}; Authorization: ${authorization}`,
+          message: `wpAppPassword=${camelCasedPassword}; WP_API_PASSWORD=${groupedPassword}; Authorization: ${authorization}`,
         },
       ],
     };
@@ -175,10 +301,146 @@ describe('WP-CLI collector', () => {
     const context = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
     const serialized = stringifyManifest(context);
 
-    expect(JSON.stringify(context)).not.toContain(password);
+    expect(JSON.stringify(context)).not.toContain(camelCasedPassword);
     expect(JSON.stringify(context)).not.toContain(authorization);
-    expect(serialized).not.toContain(password);
+    expect(serialized).not.toContain(camelCasedPassword);
     expect(serialized).not.toContain(authorization);
+    for (const group of groupedPassword.split(' ')) {
+      expect(JSON.stringify(context)).not.toContain(group);
+      expect(serialized).not.toContain(group);
+    }
+    expect(JSON.stringify(context)).toContain('wpAppPassword: [REDACTED]');
+    expect(JSON.stringify(context)).toContain('WP_API_PASSWORD: [REDACTED]');
+  });
+
+  it('hashes the final redacted, schema-normalized manifest and survives a JSON validation round trip', async () => {
+    mockedOutput = {
+      site: { url: 'https://example.test' },
+      wordpress: {},
+      theme: { settings: { custom: { apiKey: 'theme-secret' } } },
+      plugins: [{ slug: 'example/example.php', name: 'Example', active: true }],
+      blocks: { types: [] },
+      bindings: {
+        available: true,
+        sources: [{ name: 'example/source', usesContext: ['postType', 'postId'] }],
+        supportedAttributes: { 'example/block': ['z', 'a'] },
+      },
+      contentModel: {
+        postTypes: [{ name: 'post', fields: [{ name: 'example', source: 'example/source', args: {} }] }],
+      },
+      patterns: { items: [] },
+      media: {},
+      warnings: [],
+    };
+
+    const context = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    const validated = validate(JSON.parse(stringifyManifest(context)));
+
+    expect(context.site).toMatchObject({ environment: 'unknown', isMultisite: false });
+    expect(context.bindings?.sources[0]).toMatchObject({ usesContext: ['postId', 'postType'], argsSchema: null });
+    expect(context.contentModel?.postTypes[0]?.fields[0]?.bindable).toBe(true);
+    expect(context.theme?.settings).toEqual({ custom: { apiKey: '[REDACTED]' } });
+    expect(context.theme?.themeJsonHash).toBe(sourceHash({ settings: { custom: { apiKey: '[REDACTED]' } } }));
+    expect(context.provenance.sourceHash).toBe(sourceHash(context));
+    expect(validated.ok).toBe(true);
+    expect(validated.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+    expect(sourceHash(validated.context)).toBe(context.provenance.sourceHash);
+  });
+
+  it('normalizes set-like collections but preserves meaningful theme-settings array order', async () => {
+    const output = (reverse: boolean): Record<string, unknown> => ({
+      ...wpOutput(),
+      theme: {
+        settings: {
+          color: {
+            palette: reverse
+              ? [{ slug: 'second', color: '#222' }, { slug: 'first', color: '#111' }]
+              : [{ slug: 'first', color: '#111' }, { slug: 'second', color: '#222' }],
+          },
+        },
+      },
+      plugins: reverse
+        ? [{ slug: 'z/z.php', name: 'Zed' }, { slug: 'a/a.php', name: 'Aye' }]
+        : [{ slug: 'a/a.php', name: 'Aye' }, { slug: 'z/z.php', name: 'Zed' }],
+      blocks: {
+        types: reverse
+          ? [{ name: 'z/block', attributes: {}, supports: {} }, { name: 'a/block', attributes: {}, supports: {} }]
+          : [{ name: 'a/block', attributes: {}, supports: {} }, { name: 'z/block', attributes: {}, supports: {} }],
+      },
+      bindings: {
+        available: true,
+        sources: reverse
+          ? [{ name: 'z/source', usesContext: ['z', 'a'] }, { name: 'a/source', usesContext: ['z', 'a'] }]
+          : [{ name: 'a/source', usesContext: ['a', 'z'] }, { name: 'z/source', usesContext: ['a', 'z'] }],
+        supportedAttributes: { 'example/block': reverse ? ['z', 'a'] : ['a', 'z'] },
+        warnings: [],
+      },
+      contentModel: {
+        postTypes: [
+          {
+            name: 'post',
+            taxonomies: reverse ? ['z', 'a'] : ['a', 'z'],
+            fields: reverse
+              ? [
+                  { name: 'z', source: 'example/source', args: {} },
+                  { name: 'a', source: 'example/source', args: {} },
+                ]
+              : [
+                  { name: 'a', source: 'example/source', args: {} },
+                  { name: 'z', source: 'example/source', args: {} },
+                ],
+          },
+        ],
+      },
+      patterns: {
+        items: [
+          {
+            name: 'example/pattern',
+            categories: reverse ? ['z', 'a'] : ['a', 'z'],
+            blockTypes: reverse ? ['z/block', 'a/block'] : ['a/block', 'z/block'],
+            postTypes: reverse ? ['z', 'a'] : ['a', 'z'],
+          },
+        ],
+      },
+      media: {
+        imageSizes: reverse
+          ? [{ name: 'z', width: 1, height: 1, crop: false }, { name: 'a', width: 1, height: 1, crop: false }]
+          : [{ name: 'a', width: 1, height: 1, crop: false }, { name: 'z', width: 1, height: 1, crop: false }],
+      },
+      warnings: reverse
+        ? [
+            { code: 'z', severity: 'info', surface: 'example', message: 'z' },
+            { code: 'a', severity: 'info', surface: 'example', message: 'a' },
+          ]
+        : [
+            { code: 'a', severity: 'info', surface: 'example', message: 'a' },
+            { code: 'z', severity: 'info', surface: 'example', message: 'z' },
+          ],
+    });
+
+    const forward = output(false);
+    const reorderedSets = output(true);
+    (reorderedSets.theme as Record<string, unknown>).settings = (forward.theme as Record<string, unknown>).settings;
+    const reorderedPalette = output(false);
+    (reorderedPalette.theme as Record<string, unknown>).settings = (output(true).theme as Record<string, unknown>).settings;
+
+    mockedOutput = forward;
+    const first = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    mockedOutput = reorderedSets;
+    const second = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    mockedOutput = reorderedPalette;
+    const third = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+
+    expect(first.plugins?.map((plugin) => plugin.slug)).toEqual(['a/a.php', 'z/z.php']);
+    expect(second.plugins?.map((plugin) => plugin.slug)).toEqual(['a/a.php', 'z/z.php']);
+    expect(first.provenance.sourceHash).toBe(second.provenance.sourceHash);
+    expect(first.provenance.sourceHash).not.toBe(third.provenance.sourceHash);
+    expect(first.theme?.settings).toEqual({
+      color: { palette: [{ slug: 'first', color: '#111' }, { slug: 'second', color: '#222' }] },
+    });
+    expect(third.theme?.settings).toEqual({
+      color: { palette: [{ slug: 'second', color: '#222' }, { slug: 'first', color: '#111' }] },
+    });
   });
 
   it('normalizes collector arrays with code-unit ordering', async () => {

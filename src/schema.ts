@@ -13,12 +13,17 @@ const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
 );
 
 export const warningSeveritySchema = z.enum(['info', 'warning', 'error']);
+export const warningCoverageSchema = z.enum(['complete', 'partial', 'unavailable']);
 
 export const contextWarningSchema = z.object({
   code: z.string().min(1),
   severity: warningSeveritySchema,
   message: z.string().min(1),
   surface: z.string().min(1),
+  // A collector can make an explicit statement about whether this warning
+  // changes the coverage of its surface. Omission is intentionally handled
+  // conservatively by coverageFor(), rather than guessed from the code.
+  coverage: warningCoverageSchema.optional(),
 });
 
 export const validationIssueSchema = z.object({
@@ -55,6 +60,13 @@ export const bindingFieldSchema = z
     bindable: z.boolean().default(true),
   })
   .passthrough();
+
+export const patternSchema = z
+  .object({
+    // Pattern names are reusable registry identifiers, not collection offsets.
+    name: z.string().min(1).regex(/\S/, 'Pattern name must not be blank.'),
+  })
+  .catchall(jsonValueSchema);
 
 export const siteContextSchema = z
   .object({
@@ -143,7 +155,7 @@ export const siteContextSchema = z
       .optional(),
     patterns: z
       .object({
-        items: z.array(z.record(z.string(), jsonValueSchema)).default([]),
+        items: z.array(patternSchema).default([]),
       })
       .passthrough()
       .optional(),
@@ -183,6 +195,9 @@ export const summarySchema = z.object({
     supportedAttributes: z.record(z.string(), z.array(z.string())),
     fieldsByPostType: z.record(z.string(), z.number()),
   }),
+  coverage: z.record(z.string(), z.enum(['complete', 'partial', 'unavailable'])),
+  supportedWork: z.array(z.string()),
+  unknownWork: z.array(z.string()),
   warningsBySurface: z.record(z.string(), z.array(contextWarningSchema)),
 });
 

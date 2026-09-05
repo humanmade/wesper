@@ -25,4 +25,21 @@ describe('collector diagnostic sanitisation', () => {
     expect(sanitized).not.toContain(password);
     expect(() => assertNoUrlCredentials(url, '--wp-url')).toThrow('--wp-url must not contain URL credentials.');
   });
+
+  it('redacts labelled and command-form grouped Application Passwords', () => {
+    const camelCasedPassword = 'synthetic-camel-cased-password';
+    const groupedPassword = 'abcd efgh ijkl mnop qrst uvwx';
+    const sanitized = sanitizeErrorMessage(
+      `wpAppPassword=${camelCasedPassword}; WP_API_PASSWORD=${groupedPassword}; --app-password ${groupedPassword}; --application-password=${groupedPassword}`,
+    );
+
+    expect(sanitized).toContain('wpAppPassword: [REDACTED]');
+    expect(sanitized).toContain('WP_API_PASSWORD: [REDACTED]');
+    expect(sanitized).toContain('--app-password=[REDACTED]');
+    expect(sanitized).toContain('--application-password=[REDACTED]');
+    expect(sanitized).not.toContain(camelCasedPassword);
+    for (const group of groupedPassword.split(' ')) {
+      expect(sanitized).not.toContain(group);
+    }
+  });
 });

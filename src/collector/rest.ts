@@ -1,6 +1,6 @@
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
 import { assertNoUrlCredentials } from './safe.js';
-import type { CollectOptions, ContextWarning, SiteContext } from '../types.js';
+import { CollectionTransportError, UsageError, type CollectOptions, type ContextWarning, type SiteContext } from '../types.js';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -12,7 +12,7 @@ const CORE_POST_DATA_FIELDS = [
 
 export async function collectRest(options: CollectOptions): Promise<SiteContext> {
   if (!options.wpUrl) {
-    throw new Error('REST collector requires --wp-url.');
+    throw new UsageError('REST collector requires --wp-url.');
   }
 
   assertNoUrlCredentials(options.wpUrl, '--wp-url');
@@ -25,10 +25,16 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
 
   const warnings: ContextWarning[] = [];
   const raw: Record<string, unknown> = { warnings };
+  let successfulRequests = 0;
+  const readJson = async (url: string): Promise<unknown> => {
+    const response = await getJson(url, auth);
+    successfulRequests += 1;
+    return response;
+  };
 
   // site
   try {
-    const index = (await getJson(`${base}/wp-json/`, auth)) as { name?: string; description?: string };
+    const index = (await readJson(`${base}/wp-json/`)) as { name?: string; description?: string };
     raw.site = { url: base, name: index.name ?? '', environment: 'unknown', isMultisite: false };
   } catch {
     raw.site = { url: base, environment: 'unknown', isMultisite: false };
@@ -37,6 +43,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       severity: 'warning',
       surface: 'site',
       message: 'The REST API root index could not be read; site name is omitted.',
+      coverage: 'partial',
     });
   }
 
@@ -46,11 +53,12 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     severity: 'info',
     surface: 'wordpress',
     message: 'WordPress version/features are not exposed over the core REST API.',
+    coverage: 'unavailable',
   });
 
   // theme + global-styles
   try {
-    const themes = (await getJson(`${base}/wp-json/wp/v2/themes?status=active`, auth)) as Array<{
+    const themes = (await readJson(`${base}/wp-json/wp/v2/themes?status=active`)) as Array<{
       stylesheet?: string;
       template?: string;
       name?: { rendered?: string } | string;
@@ -61,9 +69,8 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     const stylesheet = theme?.stylesheet;
     let settings: unknown;
     if (stylesheet) {
-      const globalStyles = (await getJson(
+      const globalStyles = (await readJson(
         `${base}/wp-json/wp/v2/global-styles/themes/${encodeURIComponent(stylesheet)}?context=${context}`,
-        auth,
       )) as { settings?: unknown };
       settings = globalStyles.settings ?? undefined;
     }
@@ -81,6 +88,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       surface: 'theme.settings',
       message:
         'REST global-styles returns the user-customization layer, not the fully merged theme.json defaults; pure-theme-default tokens may be under-reported. Use get-site-context as the baseline.',
+      coverage: 'partial',
     });
   } catch {
     warnings.push({
@@ -88,12 +96,13 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       severity: 'warning',
       surface: 'theme',
       message: 'Theme or global-styles could not be retrieved over the core REST API.',
+      coverage: 'unavailable',
     });
   }
 
   // blocks
   try {
-    const blockTypes = (await getJson(`${base}/wp-json/wp/v2/block-types`, auth)) as Array<{
+    const blockTypes = (await readJson(`${base}/wp-json/wp/v2/block-types`)) as Array<{
       name: string;
       api_version?: number;
       title?: string;
@@ -117,12 +126,13 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       severity: 'warning',
       surface: 'blocks',
       message: 'Block types could not be retrieved over the core REST API.',
+      coverage: 'unavailable',
     });
   }
 
   // contentModel
   try {
-    const restTypes = (await getJson(`${base}/wp-json/wp/v2/types`, auth)) as Record<
+    const restTypes = (await readJson(`${base}/wp-json/wp/v2/types`)) as Record<
       string,
       { name?: string; viewable?: boolean; taxonomies?: string[] }
     >;
@@ -141,6 +151,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       surface: 'contentModel',
       message:
         'Registered post meta is not enumerable over the core REST API; only core post-data fields are reported.',
+      coverage: 'partial',
     });
   } catch {
     warnings.push({
@@ -148,6 +159,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       severity: 'warning',
       surface: 'contentModel',
       message: 'Post types could not be retrieved over the core REST API.',
+      coverage: 'unavailable',
     });
   }
 
@@ -157,11 +169,12 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     severity: 'info',
     surface: 'bindings',
     message: 'Block binding sources are not exposed over the core REST API.',
+    coverage: 'unavailable',
   });
 
   // patterns
   try {
-    const restPatterns = (await getJson(`${base}/wp-json/wp/v2/block-patterns/patterns`, auth)) as Array<{
+    const restPatterns = (await readJson(`${base}/wp-json/wp/v2/block-patterns/patterns`)) as Array<{
       name: string;
       title?: string;
       categories?: string[];
@@ -182,6 +195,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       severity: 'info',
       surface: 'patterns',
       message: 'Block patterns were not retrievable (endpoint may require additional capabilities).',
+      coverage: 'unavailable',
     });
   }
 
@@ -191,6 +205,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     severity: 'info',
     surface: 'plugins',
     message: 'Plugins are not retrievable over REST without elevated capabilities.',
+    coverage: 'unavailable',
   });
 
   // media — registered image sizes not exposed over core REST
@@ -199,7 +214,12 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     severity: 'info',
     surface: 'media',
     message: 'Registered image sizes are not exposed over the core REST API.',
+    coverage: 'unavailable',
   });
+
+  if (successfulRequests === 0) {
+    throw new CollectionTransportError('REST collector could not communicate with any REST endpoint.');
+  }
 
   return normalizeCollectorOutput(raw, { collector: 'rest', collectorVersion: COLLECTOR_VERSION });
 }
@@ -224,7 +244,16 @@ async function getJson(url: string, auth: string): Promise<unknown> {
 function siteRoot(wpUrl: string): string {
   // Accept either the site root or a URL that already includes the REST entry point,
   // so `--wp-url https://site.test/wp-json` does not produce `/wp-json/wp-json/...`.
-  return wpUrl.replace(/\/+$/, '').replace(/\/wp-json$/, '');
+  const base = wpUrl.replace(/\/+$/, '').replace(/\/wp-json$/, '');
+  try {
+    const url = new URL(base);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('unsupported protocol');
+    }
+    return base;
+  } catch {
+    throw new UsageError(`REST collector requires a valid absolute --wp-url; received "${wpUrl}".`);
+  }
 }
 
 function authorization(options: CollectOptions): string {
@@ -241,11 +270,11 @@ function requireSecureTransport(wpUrl: string): void {
     hostname = url.hostname;
     protocol = url.protocol;
   } catch {
-    throw new Error(`REST collector requires a valid absolute --wp-url; received "${wpUrl}".`);
+    throw new UsageError(`REST collector requires a valid absolute --wp-url; received "${wpUrl}".`);
   }
   const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
   if (protocol !== 'https:' && !isLocal) {
-    throw new Error(
+    throw new UsageError(
       'REST collector refuses to send an Application Password over a non-HTTPS connection. Use an https:// URL (localhost excepted).',
     );
   }
