@@ -75,7 +75,11 @@ export function normalizeCollectorOutput(
   warnIfMalformed(warnings, redactedRaw, 'blocks', Boolean(blocks));
   if (blocks) {
     collected.blocks = {
-      types: sortByName(array(blocks.types)),
+      types: sortByName(array(blocks.types)).map((block) => ({
+        ...block,
+        attributes: emptyArrayMap(block.attributes),
+        supports: emptyArrayMap(block.supports),
+      })),
     };
   }
   const bindingsRaw = bindingSection(redactedRaw);
@@ -184,12 +188,22 @@ function recordWithRecordArray(
 
 function bindingSection(raw: Record<string, unknown>): Record<string, unknown> | undefined {
   const value = completeRecordSection(raw, 'bindings', ['available', 'sources', 'supportedAttributes']);
+  const supportedAttributes = value && emptyArrayMap(value.supportedAttributes);
   return value &&
     typeof value.available === 'boolean' &&
     bindingSourceArray(value.sources) &&
-    stringArrayMap(value.supportedAttributes)
-    ? value
+    stringArrayMap(supportedAttributes)
+    ? { ...value, supportedAttributes }
     : undefined;
+}
+
+/**
+ * PHP's json_encode serializes an empty array as `[]`. At these known
+ * dictionary boundaries only, retain an explicit empty transport value as an
+ * empty object map. Missing values and non-empty arrays remain invalid.
+ */
+function emptyArrayMap(value: unknown): unknown {
+  return Array.isArray(value) && value.length === 0 ? {} : value;
 }
 
 function hasCompletePostTypes(value: unknown): boolean {

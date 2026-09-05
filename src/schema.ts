@@ -248,8 +248,8 @@ function validateManifestRelationships(value: RelationshipManifest, ctx: z.Refin
 
   for (const [postTypeIndex, postType] of value.contentModel?.postTypes.entries() ?? []) {
     const fieldPath = ['contentModel', 'postTypes', postTypeIndex, 'fields'] as const;
-    uniqueIdentifiers(ctx, postType.fields, 'name', fieldPath, 'field name');
-    uniqueIdentifiers(ctx, postType.fields, 'key', fieldPath, 'field key');
+    uniqueFieldIdentifiers(ctx, postType.fields, 'name', fieldPath, 'field name');
+    uniqueFieldIdentifiers(ctx, postType.fields, 'key', fieldPath, 'field key');
 
     for (const [fieldIndex, field] of postType.fields.entries()) {
       validateCoreSourceArguments(ctx, field, [...fieldPath, fieldIndex]);
@@ -300,6 +300,34 @@ function validateManifestRelationships(value: RelationshipManifest, ctx: z.Refin
         );
       }
     }
+  }
+}
+
+function uniqueFieldIdentifiers(
+  ctx: z.RefinementCtx,
+  fields: readonly { name: string; key?: string; source: string }[],
+  key: 'name' | 'key',
+  basePath: readonly (string | number)[],
+  label: string,
+): void {
+  const firstIndex = new Map<string, number>();
+  for (const [index, field] of fields.entries()) {
+    const value = field[key];
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const identifier = `${field.source}\u0000${value}`;
+    const first = firstIndex.get(identifier);
+    if (first === undefined) {
+      firstIndex.set(identifier, index);
+      continue;
+    }
+    addRelationshipIssue(
+      ctx,
+      [...basePath, index, key],
+      'manifest.duplicate_identifier',
+      `Duplicate ${label} "${value}" for binding source "${field.source}"; first declared at ${pathText([...basePath, first, key])}.`,
+    );
   }
 }
 

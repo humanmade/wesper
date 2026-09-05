@@ -97,6 +97,29 @@ describe('validation', () => {
     );
   });
 
+  it('scopes field identifiers to their binding source', () => {
+    const fields = [
+      { name: 'date', key: 'date', source: 'core/post-data', args: { field: 'date' }, type: 'string', bindable: true },
+      { name: 'date', key: 'date', source: 'core/post-meta', args: { key: 'date' }, type: 'string', bindable: true },
+    ];
+    const valid = validate(fixture({ contentModel: { postTypes: [{ name: 'post', fields }] } }));
+
+    expect(valid.ok).toBe(true);
+
+    const invalid = validate(fixture({
+      contentModel: {
+        postTypes: [{
+          name: 'post',
+          fields: [...fields, { name: 'date', key: 'date', source: 'core/post-data', args: { field: 'date' }, type: 'string', bindable: true }],
+        }],
+      },
+    }));
+    expect(invalid.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'manifest.duplicate_identifier', path: 'contentModel.postTypes.0.fields.2.name' }),
+      expect.objectContaining({ code: 'manifest.duplicate_identifier', path: 'contentModel.postTypes.0.fields.2.key' }),
+    ]));
+  });
+
   it('requires bindable fields to reference a reported binding source', () => {
     const omittedRegistry = fixture();
     delete omittedRegistry.bindings;

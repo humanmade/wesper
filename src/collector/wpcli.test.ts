@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
 import { normalizeCollectorOutput } from './normalize.js';
@@ -9,11 +9,15 @@ let mockedOutput = wpOutput();
 let mockedError: Error | null = null;
 let mockedStdout: string | undefined;
 
-vi.mock('node:child_process', () => ({
-  execFile: vi.fn((_file, _args, _options, callback) => {
-    callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
-  }),
-}));
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    execFile: vi.fn((_file, _args, _options, callback) => {
+      callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
+    }),
+  };
+});
 
 describe('WP-CLI collector', () => {
   afterEach(() => {
@@ -156,6 +160,46 @@ describe('WP-CLI collector', () => {
     expect(context.warnings.map((warning) => warning.code)).toEqual(
       expect.arrayContaining(['blocks.invalid_evidence', 'bindings.invalid_evidence', 'contentModel.invalid_evidence']),
     );
+  });
+
+  it('normalizes only explicit PHP empty-array dictionary transport values', () => {
+    const context = normalizeCollectorOutput(
+      {
+        site: {},
+        blocks: { types: [{ name: 'test/block', attributes: [], supports: [], source: 'plugin' }] },
+        bindings: { available: true, sources: [], supportedAttributes: [], warnings: [] },
+        contentModel: { postTypes: [] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.blocks?.types[0]).toMatchObject({ attributes: {}, supports: {} });
+    expect(context.bindings?.supportedAttributes).toEqual({});
+    expect(validate(JSON.parse(stringifyManifest(context))).ok).toBe(true);
+    expect(context.provenance.sourceHash).toBe(sourceHash(context));
+
+    expect(() => normalizeCollectorOutput(
+      {
+        site: {},
+        blocks: { types: [{ name: 'test/block', attributes: ['not-a-map'], supports: {}, source: 'plugin' }] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    )).toThrow();
+  });
+
+  it('serializes PHP empty dictionary boundaries as JSON objects', () => {
+    const helper = collectorSourceForTests().match(/function wesper_json_map\(\$value\) \{[\s\S]*?\n\}/)?.[0];
+    expect(helper).toBeDefined();
+
+    const output = execFileSync(
+      '/opt/homebrew/bin/php',
+      ['-r', `${helper}\necho json_encode(array('attributes' => wesper_json_map(array()), 'supports' => wesper_json_map(array()), 'supportedAttributes' => wesper_json_map(array())));`],
+      { encoding: 'utf8' },
+    );
+
+    expect(JSON.parse(output)).toEqual({ attributes: {}, supports: {}, supportedAttributes: {} });
   });
 
   it('does not default missing nested binding-source evidence to empty/null', () => {
@@ -504,6 +548,14 @@ describe('WP-CLI collector', () => {
     expect(source).not.toContain("array('key' => 'title', 'source' => 'core/post-data'");
     expect(source).not.toContain("array('key' => 'excerpt', 'source' => 'core/post-data'");
     expect(source).not.toContain("array('key' => 'featured_media', 'source' => 'core/post-data'");
+  });
+
+  it('keeps unavailable bindings free of supported-attribute fallback evidence', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain("if ($bindings_available) {");
+    expect(source).toContain("$supported_attributes = wesper_json_map($supported_attributes);");
+    expect(source).toContain("'bindings.unavailable'");
   });
 
   it('only warns about missing registered meta on public REST post types', () => {

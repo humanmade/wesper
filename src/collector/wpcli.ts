@@ -95,6 +95,12 @@ function wesper_public_props($object, $props) {
     return $out;
 }
 
+// PHP serializes an empty array as JSON [], but these collector surfaces are
+// JSON object maps even when WordPress reports no entries.
+function wesper_json_map($value) {
+    return (object) (is_array($value) || is_object($value) ? $value : array());
+}
+
 global $wp_version;
 
 $theme = wp_get_theme();
@@ -125,8 +131,8 @@ foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name =
         'apiVersion' => isset($block_type->api_version) ? $block_type->api_version : null,
         'title' => isset($block_type->title) ? $block_type->title : null,
         'category' => isset($block_type->category) ? $block_type->category : null,
-        'attributes' => isset($block_type->attributes) ? $block_type->attributes : array(),
-        'supports' => isset($block_type->supports) ? $block_type->supports : array(),
+        'attributes' => wesper_json_map(isset($block_type->attributes) ? $block_type->attributes : array()),
+        'supports' => wesper_json_map(isset($block_type->supports) ? $block_type->supports : array()),
         'source' => strpos($name, 'core/') === 0 ? 'core' : 'plugin',
     );
 }
@@ -158,17 +164,20 @@ $core_supported_attributes = array(
     'core/navigation-submenu' => array('url'),
 );
 $supported_attributes = array();
-if (function_exists('get_block_bindings_supported_attributes')) {
-    foreach ($block_types as $block_type) {
-        $attrs = get_block_bindings_supported_attributes($block_type['name']);
-        if (!empty($attrs)) {
-            $supported_attributes[$block_type['name']] = array_values($attrs);
+if ($bindings_available) {
+    if (function_exists('get_block_bindings_supported_attributes')) {
+        foreach ($block_types as $block_type) {
+            $attrs = get_block_bindings_supported_attributes($block_type['name']);
+            if (!empty($attrs)) {
+                $supported_attributes[$block_type['name']] = array_values($attrs);
+            }
         }
+    } else {
+        $supported_attributes = $core_supported_attributes;
+        $warnings[] = wesper_warning('bindings.supported_attributes_partial', 'bindings.supportedAttributes', 'WordPress does not expose get_block_bindings_supported_attributes(); using documented core compatibility table.');
     }
-} else {
-    $supported_attributes = $core_supported_attributes;
-    $warnings[] = wesper_warning('bindings.supported_attributes_partial', 'bindings.supportedAttributes', 'WordPress does not expose get_block_bindings_supported_attributes(); using documented core compatibility table.');
 }
+$supported_attributes = wesper_json_map($supported_attributes);
 
 $post_types = array();
 foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_object) {
