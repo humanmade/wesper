@@ -83,6 +83,69 @@ describe('validation', () => {
     expect(result.context?.$schema).toBe(SCHEMA_URL);
   });
 
+  it('keeps missing raw evidence from becoming complete through schema defaults', () => {
+    const result = validate({
+      contextVersion: 1,
+      site: {},
+      provenance: {
+        collectedAt: '2026-06-25T00:00:00.000Z',
+        collector: 'fixture',
+        collectorVersion: 'test',
+        sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      },
+      warnings: [],
+      blocks: {},
+      bindings: { available: true },
+      contentModel: {},
+    });
+
+    expect(result.ok).toBe(true);
+    const context = result.context as SiteContext;
+    const summary = summarize(context);
+
+    expect(context.provenance.partial).toBe(true);
+    expect(summary.coverage).toMatchObject({
+      blocks: 'partial',
+      bindings: 'partial',
+      contentModel: 'partial',
+    });
+    expect(summary.supportedWork).not.toContain(
+      'Create bindings by joining the reported block attributes with the reported post-type fields.',
+    );
+    expect(summary.unknownWork).toEqual(
+      expect.arrayContaining([expect.stringContaining('Complete binding work is not supported until')]),
+    );
+    expect(context.provenance.sourceHash).toBe(
+      'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    );
+    expect(sourceHash(context)).not.toBe(context.provenance.sourceHash);
+
+    const roundTrip = validate(JSON.parse(stringifyManifest(context)));
+    expect(roundTrip.ok).toBe(true);
+    expect(roundTrip.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+  });
+
+  it('keeps explicit unavailable bindings distinct from missing binding discovery', () => {
+    const result = validate({
+      contextVersion: 1,
+      site: {},
+      provenance: {
+        collectedAt: '2026-06-25T00:00:00.000Z',
+        collector: 'fixture',
+        collectorVersion: 'test',
+        sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      },
+      warnings: [],
+      blocks: { types: [] },
+      bindings: { available: false },
+      contentModel: { postTypes: [] },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(summarize(result.context as SiteContext).coverage.bindings).toBe('unavailable');
+    expect(result.context?.warnings).not.toContainEqual(expect.objectContaining({ code: 'bindings.invalid_evidence' }));
+  });
+
   it('exports an input JSON Schema with only raw input requirements', () => {
     expect((siteContextJsonSchema as { required?: string[] }).required).toEqual([
       'contextVersion',
@@ -134,10 +197,11 @@ describe('validation', () => {
 
     expect(result.ok).toBe(true);
     expect(result.warnings).toContainEqual({
-      code: 'absent_without_warning',
+      code: 'patterns.absent_evidence',
       severity: 'warning',
       surface: 'patterns',
-      message: 'Manifest section "patterns" is absent without a matching warning.',
+      message: 'The manifest omits patterns evidence; the surface is unavailable rather than empty.',
+      coverage: 'unavailable',
     });
   });
 
@@ -354,6 +418,57 @@ describe('theme tokens', () => {
     expect(second.theme?.tokens).toEqual(first.theme?.tokens);
     expect(first.provenance.sourceHash).toBe(second.provenance.sourceHash);
   });
+
+  it('marks a missing site surface unavailable even when every other collector surface is complete', () => {
+    const context = normalizeCollectorOutput(
+      {
+        wordpress: {},
+        theme: { settings: {} },
+        plugins: [],
+        blocks: { types: [] },
+        bindings: { available: true, sources: [], supportedAttributes: {}, warnings: [] },
+        contentModel: { postTypes: [] },
+        patterns: { items: [] },
+        media: { imageSizes: [] },
+        warnings: [
+          {
+            code: 'site.unavailable',
+            severity: 'warning',
+            surface: 'site',
+            message: 'Site metadata was not returned by the collector.',
+            coverage: 'unavailable',
+          },
+        ],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.provenance.partial).toBe(true);
+    expect(summarize(context).coverage.site).toBe('unavailable');
+    const roundTrip = validate(JSON.parse(stringifyManifest(context)));
+    expect(roundTrip.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+  });
+
+  it('materializes omitted collector evidence before hashing so validation does not alter the document', () => {
+    const context = normalizeCollectorOutput(
+      { site: {}, warnings: [] },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.warnings).toContainEqual({
+      code: 'blocks.absent_evidence',
+      severity: 'warning',
+      surface: 'blocks',
+      message: 'The collector omitted blocks evidence; the surface is unavailable rather than empty.',
+      coverage: 'unavailable',
+    });
+    expect(context.provenance.partial).toBe(true);
+
+    const serialized = stringifyManifest(context);
+    const validated = validate(JSON.parse(serialized));
+    expect(validated.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+    expect(stringifyManifest(validated.context as SiteContext)).toBe(serialized);
+  });
 });
 
 describe('summary', () => {
@@ -401,6 +516,61 @@ describe('summary', () => {
     expect(context).toBeDefined();
 
     expect(formatSummaryMarkdown(context as SiteContext)).toContain('- Patterns: absent (see warnings)');
+  });
+
+  it('separates complete, partial, and unavailable evidence from its counts', () => {
+    const manifest = fixture({
+      blocks: { types: [] },
+      bindings: {
+        available: true,
+        sources: [],
+        supportedAttributes: {},
+        warnings: [
+          {
+            code: 'bindings.supported_attributes_partial',
+            severity: 'info',
+            surface: 'bindings.supportedAttributes',
+            message: 'Only some supported attributes were reported.',
+            coverage: 'partial',
+          },
+        ],
+      },
+      contentModel: { postTypes: [] },
+      warnings: [
+        {
+          code: 'patterns.rest_unavailable',
+          severity: 'info',
+          surface: 'patterns',
+          message: 'Patterns could not be collected.',
+          coverage: 'unavailable',
+        },
+      ],
+    });
+    delete manifest.patterns;
+    const context = validate(manifest).context;
+    expect(context).toBeDefined();
+
+    const summary = summarize(context as SiteContext);
+
+    expect(summary.counts).toMatchObject({ blockTypes: 0, bindingSources: 0, postTypes: 0, patterns: 'absent' });
+    expect(summary.coverage).toMatchObject({
+      blocks: 'complete',
+      bindings: 'partial',
+      contentModel: 'complete',
+      patterns: 'unavailable',
+    });
+    expect(summary.supportedWork).toContain('Use only the reported binding sources and supported block attributes; binding evidence is incomplete.');
+    expect(summary.unknownWork).toContain(
+      'Complete binding work is not supported until binding source and supported-attribute evidence is complete.',
+    );
+    expect(summary.unknownWork).toContain('Block pattern evidence is unavailable; do not assume the surface is empty.');
+
+    const markdown = formatSummaryMarkdown(context as SiteContext);
+    expect(markdown).toContain('## Evidence');
+    expect(markdown).toContain('### Coverage');
+    expect(markdown).toContain('- bindings: partial');
+    expect(markdown).toContain('### Supported Work');
+    expect(markdown).toContain('### Remaining Unknowns');
   });
 });
 

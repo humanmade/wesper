@@ -1,11 +1,11 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { SCHEMA_URL } from './types.js';
 
-describe('CLI summarize', () => {
+describe('CLI', () => {
   it('rejects unsupported formats', async () => {
     const manifestPath = await writeFixture();
     const result = spawnSync(
@@ -32,15 +32,70 @@ describe('CLI summarize', () => {
     });
   });
 
-  it('rejects combining --rest with WP-CLI transport options', async () => {
+  it('returns the usage status for incompatible collection options', async () => {
     const result = spawnSync(
       process.execPath,
       ['--import', 'tsx', 'src/cli.ts', 'collect', '--rest', '--wp-path', '/tmp/wp'],
       { cwd: process.cwd(), encoding: 'utf8' },
     );
 
-    expect(result.status).toBe(3);
+    expect(result.status).toBe(2);
     expect(result.stderr).toContain('--rest cannot be combined with --wp-path or --ssh.');
+  });
+
+  it('returns the usage status for Commander option errors', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'collect', '--not-an-option'],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('unknown option');
+  });
+
+  it('allows partial evidence normally but rejects it under strict policy', async () => {
+    const wpDir = await mkdtemp(path.join(tmpdir(), 'wesper-cli-wp-'));
+    const wp = path.join(wpDir, 'wp');
+    await writeFile(
+      wp,
+      `#!/bin/sh
+printf '%s\\n' '${JSON.stringify(partialCollectorOutput())}'
+`,
+      { mode: 0o755 },
+    );
+    await chmod(wp, 0o755);
+    const partialOutput = path.join(wpDir, 'partial.context.json');
+    const partialResult = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'collect', '--wp-path', '/tmp/wp', '--out', partialOutput],
+      { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, PATH: wpDir } },
+    );
+
+    expect(partialResult.status).toBe(0);
+    expect(JSON.parse(await readFile(partialOutput, 'utf8'))).toMatchObject({ provenance: { partial: true } });
+
+    const strictOutput = path.join(wpDir, 'strict.context.json');
+    const strictResult = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'collect', '--wp-path', '/tmp/wp', '--strict', '--out', strictOutput],
+      { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, PATH: wpDir } },
+    );
+
+    expect(strictResult.status).toBe(1);
+    expect(strictResult.stderr).toContain('Strict collection failed');
+    await expect(access(strictOutput)).rejects.toThrow();
+  });
+
+  it('returns the transport status when WP-CLI cannot be executed', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'collect', '--wp-path', '/tmp/wp'],
+      { cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, PATH: '/definitely-not-a-path' } },
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.stderr).toContain('wesper collect:');
   });
 
   it('prints nested binding warnings during validate and exits nonzero', async () => {
@@ -94,6 +149,28 @@ function fixture(): Record<string, unknown> {
     patterns: { items: [] },
     media: { imageSizes: [] },
     warnings: [],
+  };
+}
+
+function partialCollectorOutput(): Record<string, unknown> {
+  return {
+    site: { environment: 'local', isMultisite: false },
+    wordpress: { features: {} },
+    theme: { settings: {} },
+    plugins: [],
+    blocks: { types: [] },
+    bindings: { available: false, sources: [], supportedAttributes: {}, warnings: [] },
+    contentModel: { postTypes: [] },
+    patterns: { items: [] },
+    media: { imageSizes: [] },
+    warnings: [
+      {
+        code: 'bindings.unavailable',
+        severity: 'info',
+        surface: 'bindings',
+        message: 'Block bindings could not be read.',
+      },
+    ],
   };
 }
 

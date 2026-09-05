@@ -1,7 +1,9 @@
 import { execFile } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
+import { normalizeCollectorOutput } from './normalize.js';
 import { collect, sourceHash, stringifyManifest, validate } from '../index.js';
+import { coverageFor, strictCoverageGaps } from '../warnings.js';
 
 let mockedOutput = wpOutput();
 
@@ -36,24 +38,26 @@ describe('WP-CLI collector', () => {
     );
     expect(context.bindings?.supportedAttributes['core/paragraph']).toEqual(['content']);
     expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
+    expect(context.provenance.partial).toBe(false);
   });
 
-  it('rejects actionable partial output in strict mode', async () => {
+  it('rejects unclassified binding evidence warnings in strict mode', async () => {
     mockedOutput = {
       ...wpOutput(),
       warnings: [
         {
-          code: 'collector.partial',
-          severity: 'warning',
+          code: 'bindings.read_failed',
+          severity: 'info',
           surface: 'bindings',
-          message: 'Partial binding collection.',
+          message: 'Binding source evidence could not be read.',
         },
       ],
     };
 
-    await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp', strict: true })).rejects.toThrow(
-      'Strict collection failed',
-    );
+    await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp', strict: true })).rejects.toMatchObject({
+      code: 'WESPER_STRICT_POLICY',
+      message: expect.stringContaining('bindings (partial)'),
+    });
     await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp' })).resolves.toMatchObject({
       provenance: { partial: true },
     });
@@ -82,6 +86,57 @@ describe('WP-CLI collector', () => {
       surface: 'patterns',
       message: 'Patterns could not be collected.',
     });
+  });
+
+  it('does not normalize malformed collector data as successful empty evidence', () => {
+    const context = normalizeCollectorOutput(
+      {
+        site: { environment: 'local', isMultisite: false },
+        blocks: {},
+        bindings: { available: true },
+        contentModel: { postTypes: [{ name: 'post' }] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.blocks).toBeUndefined();
+    expect(context.bindings).toBeUndefined();
+    expect(context.contentModel).toBeUndefined();
+    expect(context.provenance.partial).toBe(true);
+    expect(context.warnings.map((warning) => warning.code)).toEqual(
+      expect.arrayContaining(['blocks.invalid_evidence', 'bindings.invalid_evidence', 'contentModel.invalid_evidence']),
+    );
+  });
+
+  it('does not default missing nested binding-source evidence to empty/null', () => {
+    const context = normalizeCollectorOutput(
+      {
+        site: { environment: 'local', isMultisite: false },
+        blocks: { types: [] },
+        bindings: {
+          available: true,
+          sources: [{ name: 'acme/incomplete-source' }],
+          supportedAttributes: {},
+          warnings: [],
+        },
+        contentModel: { postTypes: [] },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.bindings).toBeUndefined();
+    expect(context.warnings).toContainEqual({
+      code: 'bindings.invalid_evidence',
+      severity: 'warning',
+      surface: 'bindings',
+      coverage: 'partial',
+      message: expect.any(String),
+    });
+    expect(context.provenance.partial).toBe(true);
+    expect(coverageFor(context, ['bindings'])).toMatchObject([{ status: 'partial' }]);
+    expect(strictCoverageGaps(context)).toContainEqual(expect.objectContaining({ surface: 'bindings', status: 'partial' }));
   });
 
   it('uses names from WordPress indexed registry records', async () => {
