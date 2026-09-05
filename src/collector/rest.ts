@@ -84,7 +84,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     control.throwIfAborted();
     for (const [index, result] of outcomes.entries()) { const slice = slices[index]!; if (result.status === 'fulfilled') Object.assign(raw, result.value); else warnings.push(sliceWarning(slice.surface, result.reason)); }
     if (!('site' in raw)) raw.site = { url: base, environment: 'unknown', isMultisite: false };
-    if ('theme' in raw) warnings.push({ code: 'theme.rest_customization_layer', severity: 'info', surface: 'theme.settings', message: 'REST global-styles returns the user-customization layer, not the fully merged theme.json defaults; pure-theme-default tokens may be under-reported. Use get-site-context as the baseline.', coverage: 'partial' });
+    if ('theme' in raw) warnings.push({ code: 'theme.rest_theme_layer', severity: 'info', surface: 'theme.settings', message: 'REST global-styles returns the core, block, and theme layer; user customizations are not included. Use WP-CLI collection for merged effective settings.', coverage: 'partial' });
     if ('contentModel' in raw) warnings.push({ code: 'content_model.rest_meta_unavailable', severity: 'info', surface: 'contentModel', message: 'Registered post meta is not enumerable over the core REST API; only core post-data fields are reported.', coverage: 'partial' });
     warnings.push(
       { code: 'wordpress.rest_unavailable', severity: 'info', surface: 'wordpress', message: 'WordPress version/features are not exposed over the core REST API.', coverage: 'unavailable' },

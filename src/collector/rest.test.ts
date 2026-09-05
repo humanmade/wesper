@@ -113,12 +113,12 @@ describe('REST collector', () => {
     });
   });
 
-  it('stamps settingsOrigin as custom because REST returns the customization layer', async () => {
+  it('stamps settingsOrigin as theme because REST returns the core, block, and theme layer', async () => {
     stubFetch(defaultRoutes);
 
     const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
 
-    expect(context.theme?.settingsOrigin).toBe('custom');
+    expect(context.theme?.settingsOrigin).toBe('theme');
   });
 
   it('publishes bounded collection metrics through the manifest contract', async () => {

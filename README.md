@@ -59,7 +59,8 @@ such as “primary” from a slug or value.
 
 `theme.settings` retains the collected settings and their constraints (for example custom colour,
 typography, spacing, layout, and unit controls). Its `settingsOrigin` is the exact layer read:
-`merged` for WP-CLI (`core + blocks + theme + user`) and `custom` for REST global styles. A
+`merged` for WP-CLI (`core + blocks + theme + user`) and `theme` for REST global styles
+(`core + blocks + theme`). A
 font-size token’s `valueSource` is `resolved` when WP-CLI asked WordPress for the CSS custom
 property value (including fluid `clamp(...)` values); otherwise it is `declared`. Missing
 settings leave the theme evidence absent; they are not represented as a known empty token set.

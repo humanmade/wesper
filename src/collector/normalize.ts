@@ -57,9 +57,9 @@ export function normalizeCollectorOutput(
     const { fontSizeValues: _fontSizeValues, ...themeEvidence } = themeRaw;
     collected.theme = {
       ...themeEvidence,
-      // REST global-styles exposes the user-customization layer, not the fully merged
-      // theme.json settings WP-CLI reads via wp_get_global_settings(); stamp the origin honestly.
-      ...(settingsAvailable ? { settingsOrigin: opts.collector === 'rest' ? 'custom' : 'merged' } : {}),
+      // The core REST theme endpoint uses get_merged_data('theme'); WP-CLI's
+      // wp_get_global_settings() also includes the custom/user layer.
+      ...(settingsAvailable ? { settingsOrigin: opts.collector === 'rest' ? 'theme' : 'merged' } : {}),
       ...(settingsAvailable ? { themeJsonHash: sourceHash({ settings }) } : {}),
       ...(settingsAvailable ? { tokens: parseThemeJsonSettings(settings, themeRaw.fontSizeValues) } : {}),
       ...(settingsAvailable ? { settings } : {}),
