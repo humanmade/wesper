@@ -28,6 +28,11 @@ export async function collect(options: CollectOptions): Promise<SiteContext> {
   }
 }
 
+/**
+ * Validate and redact a manifest's schema shape. This deliberately does not
+ * attest provenance.sourceHash integrity; callers that require integrity must
+ * compare sourceHash(result.context) with result.context.provenance.sourceHash.
+ */
 export function validate(manifest: unknown): ValidationResult {
   const redacted = redactSecrets(manifest);
   const result = siteContextSchema.safeParse(redacted);

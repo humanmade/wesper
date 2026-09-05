@@ -1,4 +1,4 @@
-import { sourceHash } from '../canonical.js';
+import { canonicalize, sourceHash } from '../canonical.js';
 import { redactSecrets } from '../redact.js';
 import { siteContextSchema } from '../schema.js';
 import { parseThemeJsonSettings, themeWarnings } from '../theme.js';
@@ -10,82 +10,92 @@ export function normalizeCollectorOutput(
   raw: Record<string, unknown>,
   opts: { collector: 'wp-cli' | 'rest'; collectorVersion: string },
 ): SiteContext {
-  const warnings = warningArray(raw.warnings);
-  if (hasOwn(raw, 'theme')) {
-    const settings = record(raw.theme).settings;
+  // Redact before deriving either hash. This also makes every subsequent
+  // normalization step operate on the exact content we may return.
+  const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
+  const warnings = warningArray(redactedRaw.warnings);
+  if (hasOwn(redactedRaw, 'theme')) {
+    const settings = record(redactedRaw.theme).settings;
     warnings.push(...themeWarnings(settings));
   }
+  const sortedWarnings = sortWarnings(warnings);
 
   const collected: Record<string, unknown> = {
     $schema: SCHEMA_URL,
     contextVersion: CONTEXT_VERSION,
-    site: record(raw.site),
+    site: record(redactedRaw.site),
     provenance: {
       collectedAt: new Date().toISOString(),
       collector: opts.collector,
       collectorVersion: opts.collectorVersion,
       sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-      partial: warnings.some((warning) => warning.severity !== 'info'),
+      partial: sortedWarnings.some((warning) => warning.severity !== 'info'),
     },
-    warnings,
+    warnings: sortedWarnings,
   };
-  if (hasOwn(raw, 'wordpress')) {
-    collected.wordpress = record(raw.wordpress);
+  if (hasOwn(redactedRaw, 'wordpress')) {
+    collected.wordpress = record(redactedRaw.wordpress);
   }
-  if (hasOwn(raw, 'theme')) {
-    const themeRaw = record(raw.theme);
+  if (hasOwn(redactedRaw, 'theme')) {
+    const themeRaw = record(redactedRaw.theme);
     const settings = themeRaw.settings;
     collected.theme = {
       ...themeRaw,
       // REST global-styles exposes the user-customization layer, not the fully merged
       // theme.json settings WP-CLI reads via wp_get_global_settings(); stamp the origin honestly.
       settingsOrigin: opts.collector === 'rest' ? 'custom' : 'merged',
-      themeJsonHash: settings ? sourceHash({ settings }) : undefined,
+      ...(settings === undefined ? {} : { themeJsonHash: sourceHash({ settings }) }),
       tokens: parseThemeJsonSettings(settings),
-      settings,
+      ...(settings === undefined ? {} : { settings }),
     };
   }
-  if (hasOwn(raw, 'plugins')) {
-    collected.plugins = array(raw.plugins);
+  if (hasOwn(redactedRaw, 'plugins')) {
+    collected.plugins = sortPlugins(array(redactedRaw.plugins));
   }
-  if (hasOwn(raw, 'blocks')) {
+  if (hasOwn(redactedRaw, 'blocks')) {
     collected.blocks = {
-      types: sortByName(array(record(raw.blocks).types)),
+      types: sortByName(array(record(redactedRaw.blocks).types)),
     };
   }
-  if (hasOwn(raw, 'bindings')) {
-    const bindingsRaw = record(raw.bindings);
+  if (hasOwn(redactedRaw, 'bindings')) {
+    const bindingsRaw = record(redactedRaw.bindings);
     collected.bindings = {
       available: Boolean(bindingsRaw.available),
-      sources: sortByName(array(bindingsRaw.sources)),
+      sources: sortBindingSources(array(bindingsRaw.sources)),
       supportedAttributes: sortSupportedAttributes(record(bindingsRaw.supportedAttributes)),
-      warnings: warningArray(bindingsRaw.warnings),
+      warnings: sortWarnings(warningArray(bindingsRaw.warnings)),
     };
   }
-  if (hasOwn(raw, 'contentModel')) {
+  if (hasOwn(redactedRaw, 'contentModel')) {
     collected.contentModel = {
-      postTypes: sortPostTypes(array(record(raw.contentModel).postTypes)),
+      postTypes: sortPostTypes(array(record(redactedRaw.contentModel).postTypes)),
     };
   }
-  if (hasOwn(raw, 'patterns')) {
+  if (hasOwn(redactedRaw, 'patterns')) {
     collected.patterns = {
-      items: sortByName(array(record(raw.patterns).items)),
+      items: sortPatterns(array(record(redactedRaw.patterns).items)),
     };
   }
-  if (hasOwn(raw, 'media')) {
-    collected.media = record(raw.media);
+  if (hasOwn(redactedRaw, 'media')) {
+    const mediaRaw = record(redactedRaw.media);
+    collected.media = {
+      ...mediaRaw,
+      ...(hasOwn(mediaRaw, 'imageSizes') ? { imageSizes: sortByName(array(mediaRaw.imageSizes)) } : {}),
+    };
   }
-  const contextWithoutHash = redactSecrets(collected);
 
-  const context = {
-    ...contextWithoutHash,
+  // Defaults are part of the returned document, so materialize and validate them
+  // before hashing. The final redaction pass is intentional defense in depth for
+  // values synthesized during normalization.
+  const normalized = siteContextSchema.parse(withoutUndefined(collected));
+  const redacted = siteContextSchema.parse(redactSecrets(normalized));
+  return {
+    ...redacted,
     provenance: {
-      ...(contextWithoutHash.provenance as Record<string, unknown>),
-      sourceHash: sourceHash(contextWithoutHash),
+      ...redacted.provenance,
+      sourceHash: sourceHash(redacted),
     },
   };
-
-  return siteContextSchema.parse(context);
 }
 
 function warningArray(value: unknown): ContextWarning[] {
@@ -119,16 +129,25 @@ function array(value: unknown): Array<Record<string, unknown>> {
 }
 
 function sortByName(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  return [...items].sort((left, right) =>
-    compareStrings(String(left.name ?? left.key ?? ''), String(right.name ?? right.key ?? '')),
-  );
+  return sortByFields(items, ['name', 'key']);
+}
+
+function sortPlugins(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByFields(items, ['slug', 'name']);
+}
+
+function sortBindingSources(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByName(items).map((source) => ({
+    ...source,
+    usesContext: sortStrings(source.usesContext),
+  }));
 }
 
 function sortPostTypes(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return sortByName(items).map((postType) => ({
     ...postType,
     fields: sortByName(array(postType.fields)),
-    taxonomies: Array.isArray(postType.taxonomies) ? postType.taxonomies.map(String).sort(compareStrings) : [],
+    taxonomies: sortStrings(postType.taxonomies),
   }));
 }
 
@@ -138,11 +157,68 @@ function sortSupportedAttributes(value: Record<string, unknown>): Record<string,
       .sort(([left], [right]) => compareStrings(left, right))
       .map(([blockName, attributes]) => [
         blockName,
-        Array.isArray(attributes) ? attributes.map(String).sort(compareStrings) : [],
+        sortStrings(attributes),
       ]),
   );
 }
 
+function sortPatterns(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByName(items).map((pattern) => sortSetProperties(pattern, ['categories', 'blockTypes', 'postTypes']));
+}
+
+function sortSetProperties(item: Record<string, unknown>, properties: string[]): Record<string, unknown> {
+  const sorted = { ...item };
+  for (const property of properties) {
+    if (Array.isArray(item[property])) {
+      sorted[property] = sortStrings(item[property]);
+    }
+  }
+  return sorted;
+}
+
+function sortWarnings(warnings: ContextWarning[]): ContextWarning[] {
+  return [...warnings].sort((left, right) => {
+    for (const field of ['surface', 'code', 'severity', 'message'] as const) {
+      const comparison = compareStrings(left[field], right[field]);
+      if (comparison !== 0) {
+        return comparison;
+      }
+    }
+    return 0;
+  });
+}
+
+function sortByFields(items: Array<Record<string, unknown>>, fields: string[]): Array<Record<string, unknown>> {
+  return [...items].sort((left, right) => {
+    for (const field of fields) {
+      const comparison = compareStrings(String(left[field] ?? ''), String(right[field] ?? ''));
+      if (comparison !== 0) {
+        return comparison;
+      }
+    }
+    return compareStrings(canonicalize(left), canonicalize(right));
+  });
+}
+
+function sortStrings(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).sort(compareStrings) : [];
+}
+
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function withoutUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => (item === undefined ? null : withoutUndefined(item)));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, nested]) => nested !== undefined)
+      .map(([key, nested]) => [key, withoutUndefined(nested)]),
+  );
 }
