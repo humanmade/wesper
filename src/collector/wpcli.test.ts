@@ -8,12 +8,19 @@ import { coverageFor, strictCoverageGaps } from '../warnings.js';
 let mockedOutput = wpOutput();
 let mockedError: Error | null = null;
 let mockedStdout: string | undefined;
+let waitForAbort = false;
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   return {
     ...actual,
-    execFile: vi.fn((_file, _args, _options, callback) => {
+    execFile: vi.fn((_file, _args, options, callback) => {
+      if (waitForAbort) {
+        (options as { signal?: AbortSignal }).signal?.addEventListener('abort', () => {
+          callback(Object.assign(new Error('aborted'), { name: 'AbortError' }), { stdout: '', stderr: '' });
+        }, { once: true });
+        return;
+      }
       callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
     }),
   };
@@ -24,6 +31,7 @@ describe('WP-CLI collector', () => {
     mockedOutput = wpOutput();
     mockedError = null;
     mockedStdout = undefined;
+    waitForAbort = false;
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -71,9 +79,29 @@ describe('WP-CLI collector', () => {
 
     expect(failure).toMatchObject({
       code: 'WESPER_TRANSPORT',
-      message: 'Collector failed: WP-CLI collector failed to run. Check WP-CLI availability and collector options.',
+      reason: 'process_failed',
+      message: 'WP-CLI collector failed to run. Check WP-CLI availability and collector options.',
     });
     expect(failure?.message).not.toContain(password);
+  });
+
+  it('reports caller cancellation while WP-CLI is in flight', async () => {
+    waitForAbort = true;
+    const controller = new AbortController();
+    const pending = collect({ collector: 'wp-cli', wpPath: '/tmp/wp', signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: 'WESPER_TRANSPORT', reason: 'cancelled' });
+    expect(execFile).toHaveBeenCalledOnce();
+  });
+
+  it('reports the collection deadline while WP-CLI is in flight', async () => {
+    waitForAbort = true;
+
+    await expect(collect({ collector: 'wp-cli', wpPath: '/tmp/wp', timeoutMs: 1 })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT', reason: 'deadline_exceeded',
+    });
+    expect(execFile).toHaveBeenCalledOnce();
   });
 
   it('does not expose malformed collector output in parser failures', async () => {

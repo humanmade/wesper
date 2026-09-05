@@ -20,6 +20,7 @@ export async function collectWpCli(options: CollectOptions): Promise<SiteContext
   const control = collectionControl(options);
   let stdout: string;
   try {
+    control.throwIfAborted();
     ({ stdout } = await execFileAsync(wpBinary, args, {
       encoding: 'utf8',
       maxBuffer: 1024 * 1024 * 20,
@@ -27,12 +28,13 @@ export async function collectWpCli(options: CollectOptions): Promise<SiteContext
     }));
     control.throwIfAborted();
   } catch (error) {
+    control.throwIfAborted();
     if (error instanceof CollectionTransportError) {
       throw error;
     }
     // execFile errors include the complete command line, which may have come
     // from untrusted CLI input. Keep the process error out of manifests/logs.
-    throw new Error('WP-CLI collector failed to run. Check WP-CLI availability and collector options.');
+    throw new CollectionTransportError('WP-CLI collector failed to run. Check WP-CLI availability and collector options.', 'process_failed');
   } finally {
     control.dispose();
   }

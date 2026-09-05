@@ -1,5 +1,5 @@
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
-import { collectionControl } from './control.js';
+import { collectionControl, combineAbortSignals } from './control.js';
 import { assertNoUrlCredentials } from './safe.js';
 import { CollectionTransportError, UsageError, type CollectionFailureReason, type CollectOptions, type ContextWarning, type SiteContext } from '../types.js';
 
@@ -35,9 +35,9 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     successfulRequests += 1; responseBytes += response.bytes;
     return response.value;
   };
-  const endpoint = (path: string, fields: string, extra: Record<string, string> = {}): string => {
+  const endpoint = (path: string, fields?: string, extra: Record<string, string> = {}): string => {
     const url = new URL(`${base}/wp-json/${path}`);
-    url.searchParams.set('_fields', fields);
+    if (fields) url.searchParams.set('_fields', fields);
     for (const [key, value] of Object.entries(extra)) url.searchParams.set(key, value);
     return url.toString();
   };
@@ -55,7 +55,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       return { blocks: { types: blocks.map((block) => ({ name: block.name, apiVersion: block.api_version ?? null, title: block.title ?? null, category: block.category ?? null, attributes: block.attributes ?? {}, supports: block.supports ?? {}, source: String(block.name).startsWith('core/') ? 'core' : 'plugin' })) } };
     } },
     { surface: 'contentModel', async run() {
-      const types = await readJson(endpoint('wp/v2/types', 'name,viewable,taxonomies')); const typeMap = record(types); if (!typeMap) throw malformed();
+      const types = await readJson(endpoint('wp/v2/types')); const typeMap = record(types); if (!typeMap) throw malformed();
       return { contentModel: { postTypes: Object.entries(typeMap).map(([name, value]) => { const type = record(value) ?? {}; return { name, label: type.name, public: Boolean(type.viewable), showInRest: true, taxonomies: Array.isArray(type.taxonomies) ? type.taxonomies : [], fields: CORE_POST_DATA_FIELDS.map((field) => ({ ...field, args: { ...field.args } })) }; }) } };
     } },
     { surface: 'patterns', async run() {
@@ -77,7 +77,13 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       { code: 'plugins.rest_unavailable', severity: 'info', surface: 'plugins', message: 'Plugins are not retrievable over REST without elevated capabilities.', coverage: 'unavailable' },
       { code: 'media.rest_unavailable', severity: 'info', surface: 'media', message: 'Registered image sizes are not exposed over core REST API.', coverage: 'unavailable' },
     );
-    if (successfulRequests === 0) throw new CollectionTransportError('REST collector could not communicate with any REST endpoint.', 'transport_failed');
+    if (successfulRequests === 0) {
+      const failure = outcomes.find((result) => result.status === 'rejected');
+      const reason = failure?.status === 'rejected' && failure.reason instanceof CollectionTransportError
+        ? failure.reason.reason ?? 'transport_failed'
+        : 'transport_failed';
+      throw new CollectionTransportError('REST collector could not communicate with any REST endpoint.', reason);
+    }
     raw.provenance = { collectionMetrics: { latencyMs: Math.round(performance.now() - startedAt), responseBytes, requests: successfulRequests } };
     return normalizeCollectorOutput(raw, { collector: 'rest', collectorVersion: COLLECTOR_VERSION });
   } finally { control.dispose(); }
@@ -89,23 +95,24 @@ async function boundedAll<T>(slices: Slice[], limit: number): Promise<PromiseSet
   return results;
 }
 async function getJson(url: string, auth: string, collectionSignal: AbortSignal, maxBytes: number): Promise<JsonResult> {
-  const request = new AbortController(); const timer = setTimeout(() => request.abort(), REQUEST_TIMEOUT_MS); const signal = AbortSignal.any([collectionSignal, request.signal]);
+  const request = new AbortController(); const timer = setTimeout(() => request.abort(), REQUEST_TIMEOUT_MS); const combined = combineAbortSignals([collectionSignal, request.signal]);
   try {
-    const response = await fetch(url, { headers: auth ? { Authorization: auth } : {}, signal });
-    if (!response.ok) throw httpFailure(response.status);
-    const length = Number(response.headers?.get?.('content-length')); if (Number.isFinite(length) && length > maxBytes) throw tooLarge();
+    const response = await fetch(url, { headers: auth ? { Authorization: auth } : {}, signal: combined.signal });
+    if (!response.ok) { await discard(response); throw httpFailure(response.status); }
+    const length = Number(response.headers?.get?.('content-length')); if (Number.isFinite(length) && length > maxBytes) { await discard(response); throw tooLarge(); }
     const text = await boundedText(response, maxBytes); try { return { value: JSON.parse(text), bytes: Buffer.byteLength(text) }; } catch { throw malformed(); }
   } catch (error) {
     if (error instanceof CollectionTransportError) throw error;
     if (collectionSignal.aborted) throw new CollectionTransportError('Collection was cancelled.', 'cancelled');
     if (request.signal.aborted) throw new CollectionTransportError('REST request timed out.', 'timeout');
     throw new CollectionTransportError('REST request failed.', 'transport_failed');
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); combined.dispose(); }
 }
+async function discard(response: Response): Promise<void> { try { await response.body?.cancel(); } catch { /* cancellation is best effort */ } }
 async function boundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) { if (typeof response.text !== 'function') return JSON.stringify(await response.json()); const text = await response.text(); if (Buffer.byteLength(text) > maxBytes) throw tooLarge(); return text; }
   const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let total = 0;
-  try { for (;;) { const part = await reader.read(); if (part.done) break; total += part.value.byteLength; if (total > maxBytes) { await reader.cancel(); throw tooLarge(); } chunks.push(part.value); } } finally { reader.releaseLock(); }
+  try { for (;;) { const part = await reader.read(); if (part.done) break; total += part.value.byteLength; if (total > maxBytes) { await reader.cancel().catch(() => undefined); throw tooLarge(); } chunks.push(part.value); } } finally { reader.releaseLock(); }
   const bytes = new Uint8Array(total); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; } return new TextDecoder().decode(bytes);
 }
 function sliceWarning(surface: string, error: unknown): ContextWarning { const reason = error instanceof CollectionTransportError ? error.reason ?? 'transport_failed' : 'transport_failed'; const labels: Record<string, string> = { route_unavailable: 'unavailable route', authentication_failed: 'authentication failure', permission_denied: 'permission denied', timeout: 'timeout', response_too_large: 'oversized response', malformed_response: 'malformed response', cancelled: 'cancellation', deadline_exceeded: 'deadline exceeded', transport_failed: 'transport failure' }; return { code: `${surface}.rest_unavailable`, severity: 'warning', surface, reason, message: `REST ${surface} evidence could not be retrieved (${labels[reason] ?? 'transport failure'}).`, coverage: 'unavailable' }; }

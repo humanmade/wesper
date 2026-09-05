@@ -8,6 +8,31 @@ export interface CollectionControl {
   throwIfAborted(): void;
 }
 
+/** Combine cancellation sources without depending on newer AbortSignal APIs. */
+export function combineAbortSignals(signals: readonly AbortSignal[]): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  const listeners = new Map<AbortSignal, () => void>();
+  const abort = (source: AbortSignal): void => {
+    if (!controller.signal.aborted) controller.abort(source.reason);
+  };
+  for (const signal of signals) {
+    if (signal.aborted) {
+      abort(signal);
+      break;
+    }
+    const listener = () => abort(signal);
+    listeners.set(signal, listener);
+    signal.addEventListener('abort', listener, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const [signal, listener] of listeners) signal.removeEventListener('abort', listener);
+      listeners.clear();
+    },
+  };
+}
+
 /** Make the caller's cancellation signal and a single collection deadline one signal. */
 export function collectionControl(options: CollectOptions): CollectionControl {
   const timeoutMs = options.timeoutMs ?? DEFAULT_COLLECTION_TIMEOUT_MS;
@@ -16,10 +41,14 @@ export function collectionControl(options: CollectOptions): CollectionControl {
   }
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort('deadline'), timeoutMs);
-  const signal = options.signal ? AbortSignal.any([options.signal, deadline.signal]) : deadline.signal;
+  const combined = options.signal ? combineAbortSignals([options.signal, deadline.signal]) : undefined;
+  const signal = combined?.signal ?? deadline.signal;
   return {
     signal,
-    dispose: () => clearTimeout(timer),
+    dispose: () => {
+      clearTimeout(timer);
+      combined?.dispose();
+    },
     throwIfAborted: () => {
       if (!signal.aborted) return;
       throw new CollectionTransportError(
