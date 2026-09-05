@@ -16,10 +16,7 @@ export function normalizeCollectorOutput(
   const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
   const warnings = warningArray(redactedRaw.warnings);
   const themeRaw = themeSection(redactedRaw);
-  if (themeRaw && hasOwn(themeRaw, 'settings')) {
-    const settings = themeRaw.settings;
-    warnings.push(...themeWarnings(settings));
-  }
+  if (themeRaw) warnings.push(...themeWarnings(themeRaw.settings));
 
   const site = recordOrUndefined(redactedRaw.site);
   if (!site) {
@@ -56,14 +53,16 @@ export function normalizeCollectorOutput(
   warnIfMalformed(warnings, redactedRaw, 'theme', Boolean(themeRaw));
   if (themeRaw) {
     const settings = themeRaw.settings;
+    const settingsAvailable = settings !== undefined && !Array.isArray(settings) && settings !== null && typeof settings === 'object';
+    const { fontSizeValues: _fontSizeValues, ...themeEvidence } = themeRaw;
     collected.theme = {
-      ...themeRaw,
-      // REST global-styles exposes the user-customization layer, not the fully merged
-      // theme.json settings WP-CLI reads via wp_get_global_settings(); stamp the origin honestly.
-      settingsOrigin: opts.collector === 'rest' ? 'custom' : 'merged',
-      ...(settings === undefined ? {} : { themeJsonHash: sourceHash({ settings }) }),
-      tokens: parseThemeJsonSettings(settings),
-      ...(settings === undefined ? {} : { settings }),
+      ...themeEvidence,
+      // The core REST theme endpoint uses get_merged_data('theme'); WP-CLI's
+      // wp_get_global_settings() also includes the custom/user layer.
+      ...(settingsAvailable ? { settingsOrigin: opts.collector === 'rest' ? 'theme' : 'merged' } : {}),
+      ...(settingsAvailable ? { themeJsonHash: sourceHash({ settings }) } : {}),
+      ...(settingsAvailable ? { tokens: parseThemeJsonSettings(settings, themeRaw.fontSizeValues) } : {}),
+      ...(settingsAvailable ? { settings } : {}),
     };
   }
   const plugins = redactedRaw.plugins;

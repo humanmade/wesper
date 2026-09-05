@@ -115,7 +115,51 @@ function wesper_json_map($value) {
 global $wp_version;
 
 $theme = wp_get_theme();
-$settings = function_exists('wp_get_global_settings') ? wp_get_global_settings() : array();
+$settings = function_exists('wp_get_global_settings') ? wp_get_global_settings() : null;
+
+// WP_Theme_JSON uses this exact core resolver when it writes font-size preset
+// custom properties. Keep the resolved values separate from raw settings so
+// the manifest retains the source theme.json while consumers receive CSS that
+// agrees with the referenced custom property.
+function wesper_font_size_values($settings) {
+    if (!is_array($settings) || !isset($settings['typography']['fontSizes']) || !is_array($settings['typography']['fontSizes']) || !function_exists('wp_get_typography_font_size_value')) {
+        return null;
+    }
+    $font_sizes = $settings['typography']['fontSizes'];
+    $entries_are_direct = isset($font_sizes[0]) && is_array($font_sizes[0]);
+    if ($entries_are_direct) {
+        $values = array();
+        foreach ($font_sizes as $key => $preset) {
+            $values[$key] = is_array($preset) ? wp_get_typography_font_size_value($preset, $settings) : null;
+        }
+        return $values;
+    }
+    $values = array();
+    foreach ($font_sizes as $origin => $presets) {
+        if (!is_array($presets)) {
+            continue;
+        }
+        $values[$origin] = array();
+        foreach ($presets as $key => $preset) {
+            $values[$origin][$key] = is_array($preset) ? wp_get_typography_font_size_value($preset, $settings) : null;
+        }
+    }
+    return $values;
+}
+$font_size_values = wesper_font_size_values($settings);
+$theme_data = array(
+    'stylesheet' => $theme->get_stylesheet(),
+    'template' => $theme->get_template(),
+    'name' => (string) $theme->get('Name'),
+    'version' => (string) $theme->get('Version'),
+    'isBlockTheme' => function_exists('wp_is_block_theme') ? wp_is_block_theme() : false,
+);
+if (is_array($settings)) {
+    $theme_data['settings'] = $settings;
+    if (is_array($font_size_values)) {
+        $theme_data['fontSizeValues'] = $font_size_values;
+    }
+}
 
 $plugins = array();
 if (!function_exists('get_plugin_data')) {
@@ -286,14 +330,7 @@ $output = array(
             'patterns' => class_exists('WP_Block_Patterns_Registry'),
         ),
     ),
-    'theme' => array(
-        'stylesheet' => $theme->get_stylesheet(),
-        'template' => $theme->get_template(),
-        'name' => (string) $theme->get('Name'),
-        'version' => (string) $theme->get('Version'),
-        'isBlockTheme' => function_exists('wp_is_block_theme') ? wp_is_block_theme() : false,
-        'settings' => $settings,
-    ),
+    'theme' => $theme_data,
     'plugins' => $plugins,
     'blocks' => array('types' => $block_types),
     'bindings' => array(

@@ -9,7 +9,7 @@ export {
   redactSecrets,
 } from './redact.js';
 export { orderManifestForJson, stringifyManifest } from './serialize.js';
-export { parseThemeJsonSettings } from './theme.js';
+export { parseThemeJsonSettings, type ThemeToken, type ThemeTokenKind, type ThemeTokenOrigin } from './theme.js';
 export { summarize, formatSummaryMarkdown } from './summary.js';
 
 import { ZodError } from 'zod/v4';
