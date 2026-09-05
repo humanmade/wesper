@@ -43,6 +43,20 @@ describe('CLI summarize', () => {
     expect(result.stderr).toContain('--rest cannot be combined with --wp-path or --ssh.');
   });
 
+  it('redacts credentials from CLI error diagnostics', () => {
+    const password = 'synthetic-cli-app-password';
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'src/cli.ts', 'validate', `https://synthetic-user:${password}@example.test/manifest.json`],
+      { cwd: process.cwd(), encoding: 'utf8' },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('[REDACTED_URL]');
+    expect(result.stderr).not.toContain('synthetic-user');
+    expect(result.stderr).not.toContain(password);
+  });
+
   it('prints nested binding warnings during validate and exits nonzero', async () => {
     const manifestPath = await writeFixture({
       bindings: {

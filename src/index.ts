@@ -1,7 +1,13 @@
 export * from './types.js';
 export { siteContextJsonSchema, siteContextSchema } from './schema.js';
 export { canonicalize, sourceHash } from './canonical.js';
-export { redactSecrets } from './redact.js';
+export {
+  MAX_REDACTION_DEPTH,
+  MAX_REDACTION_NODES,
+  REDACTED,
+  RedactionError,
+  redactSecrets,
+} from './redact.js';
 export { orderManifestForJson, stringifyManifest } from './serialize.js';
 export { parseThemeJsonSettings } from './theme.js';
 export { summarize, formatSummaryMarkdown } from './summary.js';
@@ -9,7 +15,7 @@ export { summarize, formatSummaryMarkdown } from './summary.js';
 import { ZodError } from 'zod/v4';
 import { collectRest } from './collector/rest.js';
 import { collectWpCli } from './collector/wpcli.js';
-import { redactSecrets } from './redact.js';
+import { RedactionError, redactSecrets } from './redact.js';
 import { siteContextSchema } from './schema.js';
 import { actionableWarnings, allWarnings } from './warnings.js';
 import type { CollectOptions, SiteContext, ValidationIssue, ValidationResult } from './types.js';
@@ -29,7 +35,19 @@ export async function collect(options: CollectOptions): Promise<SiteContext> {
 }
 
 export function validate(manifest: unknown): ValidationResult {
-  const redacted = redactSecrets(manifest);
+  let redacted: unknown;
+  try {
+    redacted = redactSecrets(manifest);
+  } catch (error) {
+    if (error instanceof RedactionError) {
+      return {
+        ok: false,
+        errors: [{ path: '<root>', message: error.message }],
+        warnings: [],
+      };
+    }
+    throw error;
+  }
   const result = siteContextSchema.safeParse(redacted);
   if (!result.success) {
     return {

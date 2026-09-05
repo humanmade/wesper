@@ -2,13 +2,23 @@ import { createHash } from 'node:crypto';
 import { redactSecrets } from './redact.js';
 
 export function canonicalize(value: unknown): string {
-  return JSON.stringify(sortJson(value));
+  // Canonicalization is a public package boundary too. Work only from the
+  // bounded, data-only copy so it cannot recurse indefinitely or turn a
+  // credential-bearing URL into a stable leaked representation.
+  return canonicalizeRedacted(redactSecrets(value));
 }
 
 export function sourceHash(value: unknown): string {
   const hash = createHash('sha256');
-  hash.update(canonicalize(redactSecrets(withoutVolatileProvenance(value))));
+  // Redact before cloning or recursively sorting: callers can pass arbitrary
+  // manifest-shaped input and no raw credential should reach the hash input.
+  const redacted = redactSecrets(value);
+  hash.update(canonicalizeRedacted(withoutVolatileProvenance(redacted)));
   return `sha256:${hash.digest('hex')}`;
+}
+
+function canonicalizeRedacted(value: unknown): string {
+  return JSON.stringify(sortJson(value));
 }
 
 export function withoutVolatileProvenance(value: unknown): unknown {

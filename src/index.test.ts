@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { canonicalize, sourceHash } from './canonical.js';
-import { redactSecrets } from './redact.js';
+import { MAX_REDACTION_DEPTH, redactSecrets } from './redact.js';
 import { siteContextJsonSchema } from './schema.js';
 import { parseThemeJsonSettings } from './theme.js';
 import { SCHEMA_URL, type SiteContext } from './types.js';
@@ -49,6 +49,30 @@ describe('validation', () => {
         message: 'Binding support is partial.',
       },
     ]);
+  });
+
+  it('sanitises credentials in warning messages before validation and serialization', () => {
+    const password = 'synthetic-validated-warning-password';
+    const authorization = 'Basic synthetic-validated-warning-authorization';
+    const manifest = fixture({
+      warnings: [
+        {
+          code: 'collector.partial',
+          severity: 'warning',
+          surface: 'site',
+          message: `Application Password: ${password}; Authorization: ${authorization}`,
+        },
+      ],
+    });
+
+    const result = validate(manifest);
+    const serialized = stringifyManifest(manifest as SiteContext);
+
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.context)).not.toContain(password);
+    expect(JSON.stringify(result.context)).not.toContain(authorization);
+    expect(serialized).not.toContain(password);
+    expect(serialized).not.toContain(authorization);
   });
 
   it('accepts a minimal manifest with only required contract surfaces', () => {
@@ -201,6 +225,34 @@ describe('sourceHash and redaction', () => {
 
     expect(redacted).toEqual({ tokens: { primary: '#fff' }, slugKey: 'hero', monkey: 'ok' });
   });
+
+  it('sanitises URL userinfo before validation, hashing, and serialization', () => {
+    const password = 'synthetic-url-app-password';
+    const credentialUrl = `https://synthetic-user:${password}@example.test/wp-json/`;
+    const redactedUrl = 'https://%5BREDACTED%5D@example.test/wp-json/';
+    const result = validate(fixture({ site: { url: credentialUrl } }));
+
+    expect(result.ok).toBe(true);
+    expect(result.context?.site.url).toBe(redactedUrl);
+    expect(canonicalize({ site: { url: credentialUrl } })).not.toContain(password);
+    expect(sourceHash({ site: { url: credentialUrl } })).toBe(sourceHash({ site: { url: redactedUrl } }));
+    expect(stringifyManifest(fixture({ site: { url: credentialUrl } }) as SiteContext)).not.toContain(password);
+  });
+
+  it('turns excessively nested manifest input into a bounded validation failure', () => {
+    let nested: unknown = { value: 'safe' };
+    for (let depth = 0; depth <= MAX_REDACTION_DEPTH; depth += 1) {
+      nested = { nested };
+    }
+
+    const result = validate(nested);
+
+    expect(result).toMatchObject({
+      ok: false,
+      errors: [{ path: '<root>', message: expect.stringContaining('Redaction refused input nested') }],
+      warnings: [],
+    });
+  });
 });
 
 describe('theme tokens', () => {
@@ -274,6 +326,36 @@ describe('summary', () => {
     expect(context).toBeDefined();
 
     expect(formatSummaryMarkdown(context as SiteContext)).toContain('- Patterns: absent (see warnings)');
+  });
+
+  it('groups prototype-named warning surfaces as ordinary own keys', () => {
+    const context = validate(
+      fixture({
+        warnings: [
+          {
+            code: 'collector.constructor',
+            severity: 'warning',
+            surface: 'constructor',
+            message: 'Constructor-named surface.',
+          },
+          {
+            code: 'collector.proto',
+            severity: 'warning',
+            surface: '__proto__',
+            message: 'Prototype-named surface.',
+          },
+        ],
+      }),
+    ).context as SiteContext;
+
+    const summary = summarize(context);
+
+    expect(Object.getPrototypeOf(summary.warningsBySurface)).toBeNull();
+    expect(Object.hasOwn(summary.warningsBySurface, 'constructor')).toBe(true);
+    expect(Object.hasOwn(summary.warningsBySurface, '__proto__')).toBe(true);
+    expect(summary.warningsBySurface.constructor).toHaveLength(1);
+    expect(summary.warningsBySurface.__proto__).toHaveLength(1);
+    expect(formatSummaryMarkdown(context)).toContain('- __proto__: [collector.proto] Prototype-named surface.');
   });
 });
 

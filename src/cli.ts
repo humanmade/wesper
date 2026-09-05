@@ -2,6 +2,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
+import { sanitizeErrorMessage } from './collector/safe.js';
 import { allWarnings, hasActionableWarnings } from './warnings.js';
 
 const program = new Command();
@@ -140,5 +141,5 @@ async function writeOutput(output: string, out?: string): Promise<void> {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return sanitizeErrorMessage(error);
 }

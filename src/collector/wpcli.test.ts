@@ -4,16 +4,20 @@ import { collectorSourceForTests } from './wpcli.js';
 import { collect, stringifyManifest } from '../index.js';
 
 let mockedOutput = wpOutput();
+let mockedError: Error | null = null;
+let mockedStdout: string | undefined;
 
 vi.mock('node:child_process', () => ({
   execFile: vi.fn((_file, _args, _options, callback) => {
-    callback(null, { stdout: JSON.stringify(mockedOutput), stderr: '' });
+    callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
   }),
 }));
 
 describe('WP-CLI collector', () => {
   afterEach(() => {
     mockedOutput = wpOutput();
+    mockedError = null;
+    mockedStdout = undefined;
     vi.clearAllMocks();
   });
 
@@ -35,6 +39,45 @@ describe('WP-CLI collector', () => {
     );
     expect(context.bindings?.supportedAttributes['core/paragraph']).toEqual(['content']);
     expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
+  });
+
+  it('rejects URL userinfo before it enters WP-CLI argv', async () => {
+    const password = 'synthetic-wpcli-app-password';
+
+    await expect(
+      collect({ collector: 'wp-cli', wpPath: '/tmp/wp', wpUrl: `https://synthetic-user:${password}@example.test` }),
+    ).rejects.toThrow('--wp-url must not contain URL credentials.');
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('does not expose failing WP-CLI command arguments', async () => {
+    const password = 'synthetic-command-password';
+    mockedError = new Error(`Command failed: wp --url=https://synthetic-user:${password}@example.test eval`);
+
+    let failure: Error | undefined;
+    try {
+      await collect({ collector: 'wp-cli', wpPath: '/tmp/wp', wpUrl: 'https://example.test' });
+    } catch (error) {
+      failure = error as Error;
+    }
+
+    expect(failure?.message).toBe('WP-CLI collector failed to run. Check WP-CLI availability and collector options.');
+    expect(failure?.message).not.toContain(password);
+  });
+
+  it('does not expose malformed collector output in parser failures', async () => {
+    const password = 'synthetic-collector-output-password';
+    mockedStdout = `{\"error\": \"Authorization: Basic ${password}\"`;
+
+    let failure: Error | undefined;
+    try {
+      await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    } catch (error) {
+      failure = error as Error;
+    }
+
+    expect(failure?.message).toBe('WP-CLI collector returned malformed JSON.');
+    expect(failure?.message).not.toContain(password);
   });
 
   it('rejects actionable partial output in strict mode', async () => {
@@ -112,6 +155,30 @@ describe('WP-CLI collector', () => {
     expect(context.blocks?.types[0]).toMatchObject({ attributes: { appPassword: '[REDACTED]' } });
     expect(serialized).not.toContain('secret-value');
     expect(serialized).not.toContain('block-secret');
+  });
+
+  it('sanitises credentials embedded in collector warning messages', async () => {
+    const password = 'synthetic-warning-app-password';
+    const authorization = 'Basic synthetic-warning-authorization';
+    mockedOutput = {
+      ...wpOutput(),
+      warnings: [
+        {
+          code: 'collector.partial',
+          severity: 'warning',
+          surface: 'site',
+          message: `Application Password: ${password}; Authorization: ${authorization}`,
+        },
+      ],
+    };
+
+    const context = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    const serialized = stringifyManifest(context);
+
+    expect(JSON.stringify(context)).not.toContain(password);
+    expect(JSON.stringify(context)).not.toContain(authorization);
+    expect(serialized).not.toContain(password);
+    expect(serialized).not.toContain(authorization);
   });
 
   it('normalizes collector arrays with code-unit ordering', async () => {

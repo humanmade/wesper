@@ -1,4 +1,5 @@
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
+import { assertNoUrlCredentials } from './safe.js';
 import type { CollectOptions, ContextWarning, SiteContext } from '../types.js';
 
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -14,6 +15,7 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
     throw new Error('REST collector requires --wp-url.');
   }
 
+  assertNoUrlCredentials(options.wpUrl, '--wp-url');
   const base = siteRoot(options.wpUrl);
   const auth = authorization(options);
   if (auth) {
