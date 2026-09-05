@@ -45,8 +45,22 @@ describe('WP-CLI collector', () => {
       expect.any(Function),
     );
     expect(context.bindings?.supportedAttributes['core/paragraph']).toEqual(['content']);
-    expect(context.theme?.tokens.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
+    expect(context.theme?.tokens?.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
     expect(context.provenance.partial).toBe(false);
+  });
+
+  it('keeps unavailable global settings absent instead of serializing an authoritative empty array', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain("$settings = function_exists('wp_get_global_settings') ? wp_get_global_settings() : null;");
+    expect(source).toContain("if (is_array($settings)) {");
+  });
+
+  it('uses WordPress to resolve the CSS value of font-size presets', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain("wp_get_typography_font_size_value($preset, $settings)");
+    expect(source).toContain("$theme_data['fontSizeValues'] = $font_size_values;");
   });
 
   it('rejects URL userinfo before it enters WP-CLI argv', async () => {

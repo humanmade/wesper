@@ -67,6 +67,7 @@ export const nativeTokenSchema = z
     slug: z.string().min(1),
     label: z.string().min(1).optional(),
     value: z.string().min(1),
+    valueSource: z.enum(['resolved', 'declared']),
     origin: z.enum(['core', 'theme', 'user', 'unknown']),
     references: z.object({
       cssCustomProperty: z.string().min(1),
@@ -176,18 +177,18 @@ export const siteContextSchema = z
         version: z.string().optional(),
         isBlockTheme: z.boolean().optional(),
         themeJsonHash: z.string().optional(),
-        settingsOrigin: z.enum(['merged', 'theme', 'custom']).default('merged'),
+        settingsOrigin: z.enum(['merged', 'theme', 'custom']).optional(),
         tokens: z
           .object({
             colors: z.array(tokenSchema).default([]),
             spacing: z.array(tokenSchema).default([]),
             /** @deprecated Older manifests mixed font families and sizes here. */
             typography: z.array(tokenSchema).optional(),
-            fontFamilies: z.array(nativeTokenSchema).default([]),
-            fontSizes: z.array(nativeTokenSchema).default([]),
-            presets: z.array(nativeTokenSchema).default([]),
+            fontFamilies: z.array(nativeTokenSchema).optional(),
+            fontSizes: z.array(nativeTokenSchema).optional(),
+            presets: z.array(nativeTokenSchema).optional(),
           })
-          .default({ colors: [], spacing: [], fontFamilies: [], fontSizes: [], presets: [] }),
+          .optional(),
         settings: jsonValueSchema.optional(),
       })
       .passthrough()

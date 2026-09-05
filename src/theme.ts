@@ -2,23 +2,24 @@ import type { ContextWarning } from './types.js';
 
 interface ThemeJsonSettings {
   color?: { palette?: PresetCollection<{ slug?: string; name?: string; color?: string }> };
-  typography?: { fontFamilies?: PresetCollection<{ slug?: string; name?: string; fontFamily?: string }>; fontSizes?: PresetCollection<{ slug?: string; name?: string; size?: string }> };
+  typography?: { fontFamilies?: PresetCollection<{ slug?: string; name?: string; fontFamily?: string }>; fontSizes?: PresetCollection<{ slug?: string; name?: string; size?: string; fluid?: unknown }> };
   spacing?: { spacingSizes?: PresetCollection<{ slug?: string; name?: string; size?: string }> };
 }
 type PresetCollection<T> = T[] | Record<string, T[]>;
 export type ThemeTokenKind = 'color' | 'font-family' | 'font-size' | 'spacing';
 export type ThemeTokenOrigin = 'core' | 'theme' | 'user' | 'unknown';
-export interface ThemeToken { id: string; kind: ThemeTokenKind; slug: string; label?: string; value: string; origin: ThemeTokenOrigin; references: { cssCustomProperty: string; cssValue: string; blockStyle: string }; }
+export type ThemeTokenValueSource = 'resolved' | 'declared';
+export interface ThemeToken { id: string; kind: ThemeTokenKind; slug: string; label?: string; value: string; valueSource: ThemeTokenValueSource; origin: ThemeTokenOrigin; references: { cssCustomProperty: string; cssValue: string; blockStyle: string }; }
 export interface NormalizedThemeTokens { presets: ThemeToken[]; colors: ThemeToken[]; fontFamilies: ThemeToken[]; fontSizes: ThemeToken[]; spacing: ThemeToken[]; }
 
 /** Normalize effective presets. WordPress precedence is core < blocks < theme < user. */
-export function parseThemeJsonSettings(settings: unknown): NormalizedThemeTokens {
+export function parseThemeJsonSettings(settings: unknown, fontSizeValues?: unknown): NormalizedThemeTokens {
   const tokens: NormalizedThemeTokens = { presets: [], colors: [], fontFamilies: [], fontSizes: [], spacing: [] };
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return tokens;
   const typed = settings as ThemeJsonSettings;
   tokens.colors = effectiveTokens('color', presetEntries(typed.color?.palette), (entry) => entry.color);
   tokens.fontFamilies = effectiveTokens('font-family', presetEntries(typed.typography?.fontFamilies), (entry) => entry.fontFamily);
-  tokens.fontSizes = effectiveTokens('font-size', presetEntries(typed.typography?.fontSizes), (entry) => entry.size);
+  tokens.fontSizes = effectiveTokens('font-size', presetEntries(typed.typography?.fontSizes, fontSizeValues), (entry, effectiveValue) => effectiveValue ?? entry.size, (_entry, effectiveValue) => effectiveValue !== undefined ? 'resolved' : 'declared');
   tokens.spacing = effectiveTokens('spacing', presetEntries(typed.spacing?.spacingSizes), (entry) => entry.size);
   tokens.presets = [...tokens.colors, ...tokens.fontFamilies, ...tokens.fontSizes, ...tokens.spacing].sort(byToken);
   return tokens;
@@ -28,28 +29,53 @@ export function themeWarnings(settings: unknown): ContextWarning[] {
     ? [{ code: 'theme.settings_unavailable', severity: 'warning', surface: 'theme.settings', message: 'Theme settings could not be normalized.', coverage: 'partial' }]
     : [];
 }
-type PresetEntry<T> = { entry: T; origin: ThemeTokenOrigin; precedence: number };
-function presetEntries<T>(collection: PresetCollection<T> | undefined): PresetEntry<T>[] {
-  if (Array.isArray(collection)) return collection.map((entry) => ({ entry, origin: 'unknown', precedence: 0 }));
+type PresetEntry<T> = { entry: T; origin: ThemeTokenOrigin; precedence: number; effectiveValue?: string };
+function presetEntries<T>(collection: PresetCollection<T> | undefined, values?: unknown): PresetEntry<T>[] {
+  if (Array.isArray(collection)) return collection.map((entry, index) => ({ entry, origin: 'unknown', precedence: 0, effectiveValue: arrayValue(values, index) }));
   if (!collection || typeof collection !== 'object') return [];
-  return Object.entries(collection).flatMap(([bucket, entries]) => Array.isArray(entries) ? entries.map((entry) => ({ entry, ...originForBucket(bucket) })) : []);
+  return Object.entries(collection).flatMap(([bucket, entries]) => Array.isArray(entries)
+    ? entries.map((entry, index) => ({ entry, ...originForBucket(bucket), effectiveValue: nestedArrayValue(values, bucket, index) }))
+    : []);
 }
-function effectiveTokens<T extends { slug?: string; name?: string }>(kind: ThemeTokenKind, entries: PresetEntry<T>[], valueFor: (entry: T) => string | undefined): ThemeToken[] {
+function effectiveTokens<T extends { slug?: string; name?: string }>(kind: ThemeTokenKind, entries: PresetEntry<T>[], valueFor: (entry: T, effectiveValue?: string) => string | undefined, valueSourceFor: (entry: T, effectiveValue?: string) => ThemeTokenValueSource = () => 'declared'): ThemeToken[] {
   const winners = new Map<string, { token: ThemeToken; precedence: number }>();
-  for (const { entry, origin, precedence } of entries) {
-    const value = valueFor(entry);
+  for (const { entry, origin, precedence, effectiveValue } of entries) {
+    const value = valueFor(entry, effectiveValue);
     if (!entry.slug || !value) continue;
-    const candidate = makeToken(kind, entry.slug, value, entry.name, origin);
+    const slug = normalizePresetSlug(entry.slug);
+    if (!slug) continue;
+    const candidate = makeToken(kind, slug, value, entry.name, origin, valueSourceFor(entry, effectiveValue));
     const current = winners.get(candidate.id);
-    if (!current || precedence > current.precedence || (precedence === current.precedence && byToken(candidate, current.token) < 0)) {
+    // Core's get_settings_values_by_slug() assigns each entry in source order,
+    // so the final declaration at the same origin owns the native reference.
+    if (!current || precedence >= current.precedence) {
       winners.set(candidate.id, { token: candidate, precedence });
     }
   }
   return [...winners.values()].map(({ token }) => token).sort(byToken);
 }
-function makeToken(kind: ThemeTokenKind, slug: string, value: string, label: string | undefined, origin: ThemeTokenOrigin): ThemeToken {
+function makeToken(kind: ThemeTokenKind, slug: string, value: string, label: string | undefined, origin: ThemeTokenOrigin, valueSource: ThemeTokenValueSource): ThemeToken {
   const cssCustomProperty = `--wp--preset--${kind}--${slug}`;
-  return { id: `${kind}:${slug}`, kind, slug, ...(label ? { label } : {}), value, origin, references: { cssCustomProperty, cssValue: `var(${cssCustomProperty})`, blockStyle: `var:preset|${kind}|${slug}` } };
+  return { id: `${kind}:${slug}`, kind, slug, ...(label ? { label } : {}), value, valueSource, origin, references: { cssCustomProperty, cssValue: `var(${cssCustomProperty})`, blockStyle: `var:preset|${kind}|${slug}` } };
+}
+function arrayValue(values: unknown, index: number): string | undefined { return Array.isArray(values) && typeof values[index] === 'string' ? values[index] : undefined; }
+function nestedArrayValue(values: unknown, bucket: string, index: number): string | undefined {
+  return values && typeof values === 'object' && !Array.isArray(values)
+    ? arrayValue((values as Record<string, unknown>)[bucket], index)
+    : undefined;
+}
+
+/** Matches WordPress `_wp_to_kebab_case()` for theme.json's slug grammar. */
+function normalizePresetSlug(slug: string): string {
+  return slug
+    .replace(/[’']/g, '')
+    .replace(/([a-z\d])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/([A-Za-z])(\d+)/g, '$1-$2')
+    .replace(/(\d+)([A-Za-z])/g, '$1-$2')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
 }
 function originForBucket(bucket: string): { origin: ThemeTokenOrigin; precedence: number } {
   switch (bucket) {

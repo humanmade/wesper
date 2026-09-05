@@ -601,7 +601,7 @@ describe('theme tokens', () => {
     const second = normalize(settings(true));
 
     expect(first.theme?.themeJsonHash).toBe(second.theme?.themeJsonHash);
-    expect(first.theme?.tokens.colors).toMatchObject([
+    expect(first.theme?.tokens?.colors).toMatchObject([
       { id: 'color:primary', label: 'User primary', value: '#cc0000', origin: 'user' },
     ]);
     expect(second.theme?.tokens).toEqual(first.theme?.tokens);
@@ -629,6 +629,62 @@ describe('theme tokens', () => {
     expect(tokens.fontFamilies[0]).toMatchObject({ id: 'font-family:shared', label: 'Reading' });
     expect(tokens.fontSizes[0]).toMatchObject({ id: 'font-size:shared', label: 'Display' });
     expect(tokens.presets.map((token) => token.id)).toEqual(expect.arrayContaining(['font-family:shared', 'font-size:shared']));
+  });
+
+  it('uses WordPress-normalized preset slugs for references and deduplication', () => {
+    const tokens = parseThemeJsonSettings({
+      color: { palette: {
+        theme: [{ slug: 'Brand Primary', color: '#111' }],
+        user: [{ slug: 'brand-primary', color: '#222' }],
+      } },
+    });
+
+    expect(tokens.colors).toEqual([
+      expect.objectContaining({
+        id: 'color:brand-primary', slug: 'brand-primary', value: '#222', origin: 'user',
+        references: expect.objectContaining({ cssCustomProperty: '--wp--preset--color--brand-primary', blockStyle: 'var:preset|color|brand-primary' }),
+      }),
+    ]);
+  });
+
+  it('uses the final declaration when normalized slugs collide at one origin', () => {
+    const tokens = parseThemeJsonSettings({
+      color: { palette: { theme: [
+        { slug: 'BrandPrimary', color: '#111' },
+        { slug: 'brand-primary', color: '#222' },
+      ] } },
+    });
+
+    expect(tokens.colors).toEqual([expect.objectContaining({ slug: 'brand-primary', value: '#222' })]);
+  });
+
+  it('uses WordPress-resolved font-size values when the collector provides them', () => {
+    const settings = {
+      typography: {
+        fluid: true,
+        fontSizes: { theme: [{ slug: 'Display XL', size: '4rem', fluid: { min: '2rem', max: '4rem' } }] },
+      },
+    };
+    const tokens = parseThemeJsonSettings(settings, { theme: ['clamp(2rem, 1rem + 1vw, 4rem)'] });
+
+    expect(tokens.fontSizes).toEqual([
+      expect.objectContaining({ slug: 'display-xl', value: 'clamp(2rem, 1rem + 1vw, 4rem)', valueSource: 'resolved' }),
+    ]);
+  });
+
+  it('preserves unavailable theme settings as absent evidence', () => {
+    const context = normalizeCollectorOutput(
+      { site: {}, theme: { stylesheet: 'example' }, warnings: [] },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.theme).toEqual(expect.objectContaining({ stylesheet: 'example' }));
+    expect(context.theme).not.toHaveProperty('settings');
+    expect(context.theme).not.toHaveProperty('settingsOrigin');
+    expect(context.theme).not.toHaveProperty('tokens');
+    expect(context.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'theme.settings_unavailable', coverage: 'partial' }),
+    ]));
   });
 
   it('marks a missing site surface unavailable even when every other collector surface is complete', () => {

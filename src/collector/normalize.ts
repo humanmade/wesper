@@ -15,7 +15,7 @@ export function normalizeCollectorOutput(
   // normalization step operate on the exact content we may return.
   const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
   const warnings = warningArray(redactedRaw.warnings);
-  const themeRaw = completeRecordSection(redactedRaw, 'theme', ['settings']);
+  const themeRaw = recordOrUndefined(redactedRaw.theme);
   if (themeRaw) {
     const settings = themeRaw.settings;
     warnings.push(...themeWarnings(settings));
@@ -55,14 +55,16 @@ export function normalizeCollectorOutput(
   warnIfMalformed(warnings, redactedRaw, 'theme', Boolean(themeRaw));
   if (themeRaw) {
     const settings = themeRaw.settings;
+    const settingsAvailable = settings !== undefined && !Array.isArray(settings) && settings !== null && typeof settings === 'object';
+    const { fontSizeValues: _fontSizeValues, ...themeEvidence } = themeRaw;
     collected.theme = {
-      ...themeRaw,
+      ...themeEvidence,
       // The REST themes endpoint uses get_merged_data('theme'); WP-CLI's
       // wp_get_global_settings() also includes the custom/user layer.
-      settingsOrigin: opts.collector === 'rest' ? 'theme' : 'merged',
-      ...(settings === undefined ? {} : { themeJsonHash: sourceHash({ settings }) }),
-      tokens: parseThemeJsonSettings(settings),
-      ...(settings === undefined ? {} : { settings }),
+      ...(settingsAvailable ? { settingsOrigin: opts.collector === 'rest' ? 'theme' : 'merged' } : {}),
+      ...(settingsAvailable ? { themeJsonHash: sourceHash({ settings }) } : {}),
+      ...(settingsAvailable ? { tokens: parseThemeJsonSettings(settings, themeRaw.fontSizeValues) } : {}),
+      ...(settingsAvailable ? { settings } : {}),
     };
   }
   const plugins = redactedRaw.plugins;

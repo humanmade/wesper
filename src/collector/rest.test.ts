@@ -78,7 +78,7 @@ describe('REST collector', () => {
     const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
 
     expect(context.provenance.collector).toBe('rest');
-    expect(context.theme?.tokens.colors[0]).toMatchObject({
+    expect(context.theme?.tokens?.colors[0]).toMatchObject({
       id: 'color:primary', kind: 'color', slug: 'primary', value: '#0057ff', origin: 'unknown',
       references: { cssCustomProperty: '--wp--preset--color--primary', cssValue: 'var(--wp--preset--color--primary)', blockStyle: 'var:preset|color|primary' },
     });
@@ -165,7 +165,7 @@ describe('REST collector', () => {
 
     expect(context.patterns).toBeUndefined();
     expect(context.warnings.map((warning) => warning.code)).toContain('patterns.rest_unavailable');
-    expect(context.theme?.tokens.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
+    expect(context.theme?.tokens?.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
     expect(context.blocks?.types.length).toBe(2);
   });
 
