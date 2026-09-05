@@ -24,6 +24,19 @@ describe('validation', () => {
     expect(result.errors.some((error) => error.path === 'contextVersion')).toBe(true);
   });
 
+  it('rejects patterns without usable string identifiers', () => {
+    const result = validate(
+      fixture({
+        patterns: { items: [{ name: 0 }, { name: '   ' }] },
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((error) => error.path)).toEqual(
+      expect.arrayContaining(['patterns.items.0.name', 'patterns.items.1.name']),
+    );
+  });
+
   it('includes nested binding warnings in validation results', () => {
     const result = validate(
       fixture({

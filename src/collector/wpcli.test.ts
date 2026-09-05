@@ -14,6 +14,7 @@ vi.mock('node:child_process', () => ({
 describe('WP-CLI collector', () => {
   afterEach(() => {
     mockedOutput = wpOutput();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -81,6 +82,69 @@ describe('WP-CLI collector', () => {
       surface: 'patterns',
       message: 'Patterns could not be collected.',
     });
+  });
+
+  it('uses names from WordPress indexed registry records', async () => {
+    mockedOutput = {
+      ...wpOutput(),
+      // WP_Block_Patterns_Registry::get_all_registered() returns an indexed list.
+      patterns: {
+        items: [
+          { name: 'example/banner', title: 'Banner' },
+          { name: 'plugin/call-to-action', title: 'Call to action' },
+        ],
+      },
+    };
+
+    const context = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    const source = collectorSourceForTests();
+
+    expect(context.patterns?.items.map((item) => item.name)).toEqual(['example/banner', 'plugin/call-to-action']);
+    expect(source).toContain('get_all_registered() as $pattern)');
+    expect(source).toContain("'name' => $pattern['name']");
+    expect(source).toContain("!is_string($pattern['name'])");
+    expect(source).toContain("'patterns.invalid_identifier'");
+    expect(source).not.toContain('get_all_registered() as $name => $pattern)');
+  });
+
+  it('preserves the same pattern identifiers as REST for equivalent patterns', async () => {
+    const patterns = [
+      { name: 'example/banner', title: 'Banner', categories: ['featured'], blockTypes: ['core/group'], postTypes: ['page'] },
+      { name: 'plugin/call-to-action', title: 'Call to action', categories: [], blockTypes: [], postTypes: [] },
+    ];
+    mockedOutput = { ...wpOutput(), patterns: { items: patterns } };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string | URL) => {
+        const url = String(input);
+        let body: unknown;
+        if (url.endsWith('/wp-json/')) {
+          body = { name: 'Example' };
+        } else if (url.includes('/wp/v2/themes')) {
+          body = [];
+        } else if (url.includes('/wp/v2/block-types')) {
+          body = [];
+        } else if (url.includes('/wp/v2/types')) {
+          body = {};
+        } else if (url.includes('/wp/v2/block-patterns/patterns')) {
+          body = patterns.map((pattern) => ({
+            name: pattern.name,
+            title: pattern.title,
+            categories: pattern.categories,
+            block_types: pattern.blockTypes,
+            post_types: pattern.postTypes,
+          }));
+        } else {
+          return Promise.reject(new Error(`unexpected fetch: ${url}`));
+        }
+        return Promise.resolve({ ok: true, json: async () => body } as Response);
+      }),
+    );
+
+    const wpCli = await collect({ collector: 'wp-cli', wpPath: '/tmp/wp' });
+    const rest = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(rest.patterns?.items.map((item) => item.name)).toEqual(wpCli.patterns?.items.map((item) => item.name));
   });
 
   it('redacts secrets from all normalized collector surfaces before returning a manifest', async () => {
