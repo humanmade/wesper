@@ -257,11 +257,7 @@ function validateManifestRelationships(value: RelationshipManifest, ctx: z.Refin
   }
 
   const bindings = value.bindings;
-  if (!bindings) {
-    return;
-  }
-
-  if (!bindings.available) {
+  if (bindings && !bindings.available) {
     if (bindings.sources.length > 0) {
       addRelationshipIssue(
         ctx,
@@ -280,11 +276,11 @@ function validateManifestRelationships(value: RelationshipManifest, ctx: z.Refin
     }
   }
 
-  const sourceNames = new Set(bindings.sources.map((source) => source.name));
+  const sourceNames = new Set(bindings?.sources.map((source) => source.name));
   for (const [postTypeIndex, postType] of value.contentModel?.postTypes.entries() ?? []) {
     for (const [fieldIndex, field] of postType.fields.entries()) {
       const fieldPath = ['contentModel', 'postTypes', postTypeIndex, 'fields', fieldIndex] as const;
-      if (!bindings.available && field.bindable) {
+      if (bindings && !bindings.available && field.bindable) {
         addRelationshipIssue(
           ctx,
           [...fieldPath, 'bindable'],
@@ -292,7 +288,10 @@ function validateManifestRelationships(value: RelationshipManifest, ctx: z.Refin
           'Field is bindable even though bindings.available is false.',
         );
       }
-      if (bindings.available && field.bindable && !sourceNames.has(field.source)) {
+      // An omitted bindings section is absent registry evidence, not a registry
+      // that implicitly reports every source. Non-bindable fields may still
+      // describe custom sources whose argument schemas are not known to V1.
+      if (field.bindable && (!bindings || (bindings.available && !sourceNames.has(field.source)))) {
         addRelationshipIssue(
           ctx,
           [...fieldPath, 'source'],

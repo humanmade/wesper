@@ -97,7 +97,17 @@ describe('validation', () => {
     );
   });
 
-  it('validates binding sources, core binding arguments, and availability relationships', () => {
+  it('requires bindable fields to reference a reported binding source', () => {
+    const omittedRegistry = fixture();
+    delete omittedRegistry.bindings;
+
+    expect(validate(omittedRegistry).errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'bindings.missing_source', path: 'contentModel.postTypes.0.fields.0.source' }),
+        expect.objectContaining({ code: 'bindings.missing_source', path: 'contentModel.postTypes.0.fields.1.source' }),
+      ]),
+    );
+
     const missingSource = validate(
       fixture({
         bindings: {
@@ -110,6 +120,12 @@ describe('validation', () => {
     expect(missingSource.errors).toContainEqual(
       expect.objectContaining({ code: 'bindings.missing_source', path: 'contentModel.postTypes.0.fields.1.source' }),
     );
+
+    const reportedSource = validate(fixture());
+    expect(reportedSource.ok).toBe(true);
+  });
+
+  it('validates core binding arguments and availability relationships', () => {
 
     const invalidCoreArguments = validate(
       fixture({
