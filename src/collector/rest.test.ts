@@ -78,7 +78,10 @@ describe('REST collector', () => {
     const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
 
     expect(context.provenance.collector).toBe('rest');
-    expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
+    expect(context.theme?.tokens.colors[0]).toMatchObject({
+      id: 'color:primary', kind: 'color', slug: 'primary', value: '#0057ff', origin: 'unknown',
+      references: { cssCustomProperty: '--wp--preset--color--primary', cssValue: 'var(--wp--preset--color--primary)', blockStyle: 'var:preset|color|primary' },
+    });
     expect(context.blocks?.types.map((block) => block.name)).toEqual(['acme/widget', 'core/paragraph']);
     expect(context.contentModel?.postTypes[0]?.fields.map((field) => field.name)).toEqual(['date', 'link', 'modified']);
     expect(context.contentModel?.postTypes[0]?.fields.every((field) => !field.bindable)).toBe(true);
@@ -108,12 +111,12 @@ describe('REST collector', () => {
     });
   });
 
-  it('stamps settingsOrigin as custom because REST returns the customization layer', async () => {
+  it('stamps settingsOrigin as theme because the themes endpoint returns the theme layer', async () => {
     stubFetch(defaultRoutes);
 
     const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
 
-    expect(context.theme?.settingsOrigin).toBe('custom');
+    expect(context.theme?.settingsOrigin).toBe('theme');
   });
 
   it('normalizes a wp-url that already includes the REST entry point', async () => {
@@ -162,7 +165,7 @@ describe('REST collector', () => {
 
     expect(context.patterns).toBeUndefined();
     expect(context.warnings.map((warning) => warning.code)).toContain('patterns.rest_unavailable');
-    expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
+    expect(context.theme?.tokens.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
     expect(context.blocks?.types.length).toBe(2);
   });
 

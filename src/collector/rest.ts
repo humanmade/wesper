@@ -86,11 +86,11 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       settings,
     };
     warnings.push({
-      code: 'theme.rest_customization_layer',
+      code: 'theme.rest_theme_layer',
       severity: 'info',
       surface: 'theme.settings',
       message:
-        'REST global-styles returns the user-customization layer, not the fully merged theme.json defaults; pure-theme-default tokens may be under-reported. Use get-site-context as the baseline.',
+        'REST global-styles themes returns the core, block, and theme layer; user customizations are not included. Use WP-CLI collection for merged effective settings.',
       coverage: 'partial',
     });
   } catch {

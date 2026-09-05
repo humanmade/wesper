@@ -45,6 +45,34 @@ export const tokenSchema = z
     slug: z.string().min(1),
     name: z.string().optional(),
     value: z.string().min(1),
+    // Optional only for serialized V1 compatibility. Collectors emit these
+    // fields for every newly collected native preset.
+    id: z.string().min(1).optional(),
+    kind: z.enum(['color', 'font-family', 'font-size', 'spacing']).optional(),
+    label: z.string().min(1).optional(),
+    origin: z.enum(['core', 'theme', 'user', 'unknown']).optional(),
+    references: z.object({
+      cssCustomProperty: z.string().min(1),
+      cssValue: z.string().min(1),
+      blockStyle: z.string().min(1),
+    }).optional(),
+  })
+  .passthrough();
+
+/** The additive V1 native-preset view has a complete consumer contract. */
+export const nativeTokenSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(['color', 'font-family', 'font-size', 'spacing']),
+    slug: z.string().min(1),
+    label: z.string().min(1).optional(),
+    value: z.string().min(1),
+    origin: z.enum(['core', 'theme', 'user', 'unknown']),
+    references: z.object({
+      cssCustomProperty: z.string().min(1),
+      cssValue: z.string().min(1),
+      blockStyle: z.string().min(1),
+    }),
   })
   .passthrough();
 
@@ -153,9 +181,13 @@ export const siteContextSchema = z
           .object({
             colors: z.array(tokenSchema).default([]),
             spacing: z.array(tokenSchema).default([]),
-            typography: z.array(tokenSchema).default([]),
+            /** @deprecated Older manifests mixed font families and sizes here. */
+            typography: z.array(tokenSchema).optional(),
+            fontFamilies: z.array(nativeTokenSchema).default([]),
+            fontSizes: z.array(nativeTokenSchema).default([]),
+            presets: z.array(nativeTokenSchema).default([]),
           })
-          .default({ colors: [], spacing: [], typography: [] }),
+          .default({ colors: [], spacing: [], fontFamilies: [], fontSizes: [], presets: [] }),
         settings: jsonValueSchema.optional(),
       })
       .passthrough()

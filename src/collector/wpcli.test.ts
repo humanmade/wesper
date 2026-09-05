@@ -45,7 +45,7 @@ describe('WP-CLI collector', () => {
       expect.any(Function),
     );
     expect(context.bindings?.supportedAttributes['core/paragraph']).toEqual(['content']);
-    expect(context.theme?.tokens.colors).toEqual([{ slug: 'primary', value: '#0057ff' }]);
+    expect(context.theme?.tokens.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
     expect(context.provenance.partial).toBe(false);
   });
 

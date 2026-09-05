@@ -57,9 +57,9 @@ export function normalizeCollectorOutput(
     const settings = themeRaw.settings;
     collected.theme = {
       ...themeRaw,
-      // REST global-styles exposes the user-customization layer, not the fully merged
-      // theme.json settings WP-CLI reads via wp_get_global_settings(); stamp the origin honestly.
-      settingsOrigin: opts.collector === 'rest' ? 'custom' : 'merged',
+      // The REST themes endpoint uses get_merged_data('theme'); WP-CLI's
+      // wp_get_global_settings() also includes the custom/user layer.
+      settingsOrigin: opts.collector === 'rest' ? 'theme' : 'merged',
       ...(settings === undefined ? {} : { themeJsonHash: sourceHash({ settings }) }),
       tokens: parseThemeJsonSettings(settings),
       ...(settings === undefined ? {} : { settings }),

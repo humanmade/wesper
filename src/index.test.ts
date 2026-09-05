@@ -570,14 +570,11 @@ describe('theme tokens', () => {
       spacing: { spacingSizes: [{ slug: '40', size: '1rem' }] },
     });
 
-    expect(tokens).toEqual({
-      colors: [{ slug: 'primary', name: 'Primary', value: '#0057ff' }],
-      spacing: [{ slug: '40', value: '1rem' }],
-      typography: [
-        { slug: 'body', value: 'Inter, sans-serif' },
-        { slug: 'large', value: '2rem' },
-      ],
-    });
+    expect(tokens.colors[0]).toMatchObject({ id: 'color:primary', kind: 'color', label: 'Primary', value: '#0057ff' });
+    expect(tokens.colors[0]?.references.blockStyle).toBe('var:preset|color|primary');
+    expect(tokens.fontFamilies[0]).toMatchObject({ id: 'font-family:body', kind: 'font-family', value: 'Inter, sans-serif' });
+    expect(tokens.fontSizes[0]).toMatchObject({ id: 'font-size:large', kind: 'font-size', value: '2rem' });
+    expect(tokens.spacing[0]).toMatchObject({ id: 'spacing:40', kind: 'spacing', value: '1rem' });
   });
 
   it('keeps provenance stable when preset origins with the same slug are reordered', () => {
@@ -604,12 +601,34 @@ describe('theme tokens', () => {
     const second = normalize(settings(true));
 
     expect(first.theme?.themeJsonHash).toBe(second.theme?.themeJsonHash);
-    expect(first.theme?.tokens.colors).toEqual([
-      { slug: 'primary', name: 'Theme primary', value: '#0057ff' },
-      { slug: 'primary', name: 'User primary', value: '#cc0000' },
+    expect(first.theme?.tokens.colors).toMatchObject([
+      { id: 'color:primary', label: 'User primary', value: '#cc0000', origin: 'user' },
     ]);
     expect(second.theme?.tokens).toEqual(first.theme?.tokens);
     expect(first.provenance.sourceHash).toBe(second.provenance.sourceHash);
+  });
+
+  it('uses verified origin precedence without inventing semantic roles', () => {
+    const tokens = parseThemeJsonSettings({
+      color: { palette: {
+        default: [{ slug: 'brand', name: 'Core brand', color: '#111' }],
+        theme: [{ slug: 'brand', name: 'Theme brand', color: '#222' }],
+        user: [{ slug: 'brand', name: 'Editorial blue', color: '#333' }],
+        experimental: [{ slug: 'plain', color: '#444' }],
+      } },
+      typography: {
+        fontFamilies: [{ slug: 'shared', name: 'Reading', fontFamily: 'Georgia, serif' }],
+        fontSizes: [{ slug: 'shared', name: 'Display', size: '3rem' }],
+      },
+    });
+
+    expect(tokens.colors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug: 'brand', label: 'Editorial blue', value: '#333', origin: 'user' }),
+      expect.objectContaining({ slug: 'plain', origin: 'unknown' }),
+    ]));
+    expect(tokens.fontFamilies[0]).toMatchObject({ id: 'font-family:shared', label: 'Reading' });
+    expect(tokens.fontSizes[0]).toMatchObject({ id: 'font-size:shared', label: 'Display' });
+    expect(tokens.presets.map((token) => token.id)).toEqual(expect.arrayContaining(['font-family:shared', 'font-size:shared']));
   });
 
   it('marks a missing site surface unavailable even when every other collector surface is complete', () => {
