@@ -154,14 +154,11 @@ if ($bindings_available) {
     $warnings[] = wesper_warning('bindings.unavailable', 'bindings', 'Block Bindings are unavailable before WordPress 6.5.', 'warning', 'unavailable');
 }
 
-$core_supported_attributes = array(
+$legacy_supported_attributes = array(
     'core/paragraph' => array('content'),
     'core/heading' => array('content'),
-    'core/image' => array('id', 'url', 'title', 'alt', 'caption'),
+    'core/image' => array('id', 'url', 'title', 'alt'),
     'core/button' => array('url', 'text', 'linkTarget', 'rel'),
-    'core/post-date' => array('datetime'),
-    'core/navigation-link' => array('url'),
-    'core/navigation-submenu' => array('url'),
 );
 $supported_attributes = array();
 if ($bindings_available) {
@@ -172,9 +169,14 @@ if ($bindings_available) {
                 $supported_attributes[$block_type['name']] = array_values($attrs);
             }
         }
+    } elseif (version_compare($wp_version, '6.5', '>=') && version_compare($wp_version, '6.9', '<')) {
+        // This was the complete core list in 6.5 through 6.8. Do not use it
+        // beyond that range: 6.9 added the API and filters that expose site
+        // extensions and subsequent core support.
+        $supported_attributes = $legacy_supported_attributes;
+        $warnings[] = wesper_warning('bindings.supported_attributes_partial', 'bindings.supportedAttributes', 'WordPress 6.5–6.8 does not expose supported binding attributes; using its documented core baseline only.');
     } else {
-        $supported_attributes = $core_supported_attributes;
-        $warnings[] = wesper_warning('bindings.supported_attributes_partial', 'bindings.supportedAttributes', 'WordPress does not expose get_block_bindings_supported_attributes(); using documented core compatibility table.');
+        $warnings[] = wesper_warning('bindings.supported_attributes_unavailable', 'bindings.supportedAttributes', 'Supported binding attributes could not be established by this WordPress version.', 'warning', 'unavailable');
     }
 }
 $supported_attributes = wesper_json_map($supported_attributes);
@@ -183,20 +185,33 @@ $post_types = array();
 foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_object) {
     $rest_visible_meta_count = 0;
     $fields = array();
-    if (in_array('core/post-data', $binding_source_names, true)) {
+    // core/post-data was introduced in WordPress 6.9. A same-named source on
+    // an older site is not sufficient evidence that it implements core fields.
+    if (in_array('core/post-data', $binding_source_names, true) && version_compare($wp_version, '6.9', '>=')) {
         $fields = array(
             array('name' => 'date', 'key' => 'date', 'source' => 'core/post-data', 'args' => array('field' => 'date'), 'type' => 'string', 'bindable' => true),
             array('name' => 'modified', 'key' => 'modified', 'source' => 'core/post-data', 'args' => array('field' => 'modified'), 'type' => 'string', 'bindable' => true),
             array('name' => 'link', 'key' => 'link', 'source' => 'core/post-data', 'args' => array('field' => 'link'), 'type' => 'string', 'bindable' => true),
         );
+    } elseif (in_array('core/post-data', $binding_source_names, true)) {
+        $warnings[] = wesper_warning('content_model.post_data_unknown', 'contentModel.postTypes.' . $post_type_name . '.fields', 'core/post-data is registered, but this WordPress version cannot establish the core post-data field set.');
     }
-    $registered_meta = in_array('core/post-meta', $binding_source_names, true) && function_exists('get_registered_meta_keys')
-        ? get_registered_meta_keys('post', $post_type_name)
-        : array();
+    $registered_meta = array();
+    $registered_meta_read = false;
+    if (in_array('core/post-meta', $binding_source_names, true) && function_exists('get_registered_meta_keys')) {
+        // Keep this ordering aligned with _block_bindings_post_meta_get_value().
+        // A global registration therefore takes precedence over a subtype one.
+        $subtype_meta = get_registered_meta_keys('post', $post_type_name);
+        $global_meta = get_registered_meta_keys('post', '');
+        $registered_meta = array_merge($subtype_meta, $global_meta);
+        $registered_meta_read = true;
+    } elseif (in_array('core/post-meta', $binding_source_names, true)) {
+        $warnings[] = wesper_warning('content_model.post_meta_unknown', 'contentModel.postTypes.' . $post_type_name . '.fields', 'core/post-meta is registered, but registered meta keys could not be read.');
+    }
     foreach ($registered_meta as $meta_key => $args) {
         $show_in_rest = !empty($args['show_in_rest']);
-        $protected = isset($args['protected']) ? (bool) $args['protected'] : strpos((string) $meta_key, '_') === 0;
-        if (!$show_in_rest || $protected) {
+        // is_protected_meta() applies WordPress's protected_meta filter.
+        if (!$show_in_rest || is_protected_meta($meta_key, 'post')) {
             continue;
         }
         $rest_visible_meta_count++;
@@ -212,7 +227,7 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
         );
     }
     if (in_array('core/post-meta', $binding_source_names, true)) {
-        if ((bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
+        if ($registered_meta_read && (bool) $post_type_object->public && (bool) $post_type_object->show_in_rest && $rest_visible_meta_count === 0) {
             $warnings[] = wesper_warning('content_model.no_registered_meta', 'contentModel.postTypes.' . $post_type_name . '.fields', 'No registered REST-visible meta was discovered for this post type.', 'info', 'complete');
         }
     }
