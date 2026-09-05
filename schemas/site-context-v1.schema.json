@@ -116,6 +116,31 @@
         "partial": {
           "default": false,
           "type": "boolean"
+        },
+        "collectionMetrics": {
+          "type": "object",
+          "properties": {
+            "latencyMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "responseBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "requests": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "latencyMs",
+            "responseBytes",
+            "requests"
+          ]
         }
       },
       "required": [
@@ -502,6 +527,10 @@
             "partial",
             "unavailable"
           ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [

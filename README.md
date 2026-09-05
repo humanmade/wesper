@@ -141,6 +141,11 @@ wesper validate site.context.json
 wesper summarize site.context.json
 ```
 
+REST collection accepts `--timeout-ms`, `--rest-concurrency`, and
+`--max-response-bytes` to bound end-to-end execution, parallel requests, and
+individual response payloads. Library callers can pass the corresponding
+`CollectOptions` fields and an `AbortSignal`.
+
 ### Exit status
 
 `collect` may successfully produce a partial manifest unless `--strict` is set; inspect

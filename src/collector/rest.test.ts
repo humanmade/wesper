@@ -1,17 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { collect, stringifyManifest } from '../index.js';
+import { collect, sourceHash, stringifyManifest } from '../index.js';
 
 interface FetchStub {
   body: unknown;
   ok?: boolean;
   status?: number;
+  response?: Partial<Response>;
 }
 
-function jsonResponse(body: unknown, ok = true, status = 200): Response {
+function jsonResponse(body: unknown, ok = true, status = 200, response: Partial<Response> = {}): Response {
   return {
     ok,
     status,
     json: async () => body,
+    ...response,
   } as unknown as Response;
 }
 
@@ -24,13 +26,13 @@ function stubFetch(routes: (url: string) => FetchStub | undefined): void {
       if (!route) {
         return Promise.reject(new Error(`unexpected fetch: ${url}`));
       }
-      return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200));
+      return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200, route.response));
     }),
   );
 }
 
 function defaultRoutes(url: string): FetchStub | undefined {
-  if (url.endsWith('/wp-json/')) {
+  if (new URL(url).pathname === '/wp-json/') {
     return { body: { name: 'Example', description: 'A site' } };
   }
   if (url.includes('/wp/v2/themes')) {
@@ -116,6 +118,20 @@ describe('REST collector', () => {
     expect(context.theme?.settingsOrigin).toBe('custom');
   });
 
+  it('publishes bounded collection metrics through the manifest contract', async () => {
+    stubFetch(defaultRoutes);
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.provenance.collectionMetrics).toMatchObject({
+      latencyMs: expect.any(Number),
+      responseBytes: expect.any(Number),
+      requests: 6,
+    });
+    expect(context.provenance.collectionMetrics?.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(context.provenance.collectionMetrics?.responseBytes).toBeGreaterThan(0);
+  });
+
   it('normalizes a wp-url that already includes the REST entry point', async () => {
     stubFetch(defaultRoutes);
 
@@ -123,6 +139,16 @@ describe('REST collector', () => {
 
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls.every(([url]) => !String(url).includes('/wp-json/wp-json'))).toBe(true);
+  });
+
+  it('does not project the slug-keyed post-type map', async () => {
+    stubFetch(defaultRoutes);
+
+    await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const typesCall = calls.find(([url]) => String(url).includes('/wp/v2/types'));
+    expect(String(typesCall?.[0])).not.toContain('_fields=');
   });
 
   it('authenticates and requests the edit context when credentials are supplied', async () => {
@@ -166,9 +192,175 @@ describe('REST collector', () => {
     expect(context.blocks?.types.length).toBe(2);
   });
 
+  it('retains active-theme metadata when its dependent settings request fails', async () => {
+    stubFetch((url) => url.includes('/wp/v2/global-styles/themes/')
+      ? { body: {}, ok: false, status: 403 }
+      : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
+
+    expect(context.theme).toMatchObject({ stylesheet: 'twentytwentyfive', name: 'Twenty Twenty-Five' });
+    expect(context.theme?.settings).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'theme.settings.rest_unavailable', reason: 'permission_denied', coverage: 'unavailable',
+    }));
+  });
+
+  it('classifies a null site index as malformed evidence', async () => {
+    stubFetch((url) => new URL(url).pathname === '/wp-json/' ? { body: null } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'site.rest_unavailable', reason: 'malformed_response',
+    }));
+  });
+
+  it.each([null, []])('classifies an empty active-theme response %j as malformed evidence', async (body) => {
+    stubFetch((url) => url.includes('/wp/v2/themes') ? { body } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.theme).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'theme.rest_unavailable', reason: 'malformed_response',
+    }));
+  });
+
+  it.each([null, {}])('classifies an empty theme-settings response %j while retaining theme metadata', async (body) => {
+    stubFetch((url) => url.includes('/wp/v2/global-styles/themes/') ? { body } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.theme?.stylesheet).toBe('twentytwentyfive');
+    expect(context.warnings).toContainEqual(expect.objectContaining({
+      code: 'theme.settings.rest_unavailable', reason: 'malformed_response',
+    }));
+  });
+
+  it('cancels an HTTP error body before failing its slice', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    stubFetch((url) => url.includes('/wp/v2/block-patterns/patterns')
+      ? { body: {}, ok: false, status: 403, response: { body: { cancel } as unknown as ReadableStream<Uint8Array> } }
+      : defaultRoutes(url));
+
+    await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels a response declared larger than the configured limit', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const route = defaultRoutes(String(input));
+      if (!route) return Promise.reject(new Error(`unexpected fetch: ${input}`));
+      if (String(input).includes('/wp/v2/block-types')) {
+        return Promise.resolve({ ok: true, status: 200, headers: { get: () => '11' }, body: { cancel }, json: async () => route.body } as unknown as Response);
+      }
+      return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200));
+    }));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 10 });
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'blocks.rest_unavailable', reason: 'response_too_large' }));
+  });
+
+  it('cancels a chunked response once its body exceeds the configured limit', async () => {
+    const cancel = vi.fn();
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const route = defaultRoutes(String(input));
+      if (!route) return Promise.reject(new Error(`unexpected fetch: ${input}`));
+      if (String(input).includes('/wp/v2/block-types')) {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('[{"name":'));
+            controller.enqueue(new TextEncoder().encode('"core/paragraph"}]'));
+          },
+          cancel,
+        });
+        return Promise.resolve({ ok: true, status: 200, body: stream } as unknown as Response);
+      }
+      return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200));
+    }));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 10 });
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'blocks.rest_unavailable', reason: 'response_too_large' }));
+  });
+
+  it('preserves a meaningful failure reason when every response exceeds the limit', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: { get: () => '11' },
+      body: { cancel },
+    } as unknown as Response)));
+
+    await expect(collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 10 })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT',
+      reason: 'response_too_large',
+    });
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('honours pre-aborted collection signals without starting requests', async () => {
+    stubFetch(defaultRoutes);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(collect({ collector: 'rest', wpUrl: 'https://example.test', signal: controller.signal })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT', reason: 'cancelled',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('aborts in-flight REST requests when the caller cancels collection', async () => {
+    vi.stubGlobal('fetch', vi.fn((_input: string | URL, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+    })));
+    const controller = new AbortController();
+    const pending = collect({ collector: 'rest', wpUrl: 'https://example.test', signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: 'WESPER_TRANSPORT', reason: 'cancelled' });
+    expect(fetch).toHaveBeenCalled();
+  });
+
+  it('aborts in-flight REST requests when the collection deadline expires', async () => {
+    vi.stubGlobal('fetch', vi.fn((_input: string | URL, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+    })));
+
+    await expect(collect({ collector: 'rest', wpUrl: 'https://example.test', timeoutMs: 1 })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT', reason: 'deadline_exceeded',
+    });
+    expect(fetch).toHaveBeenCalled();
+  });
+
+  it('limits independent REST requests and keeps hashes deterministic', async () => {
+    let active = 0;
+    let peak = 0;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const route = defaultRoutes(String(input));
+      if (!route) return Promise.reject(new Error(`unexpected fetch: ${input}`));
+      active += 1;
+      peak = Math.max(peak, active);
+      return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200)).finally(() => { active -= 1; });
+    }));
+
+    const first = await collect({ collector: 'rest', wpUrl: 'https://example.test', restConcurrency: 2 });
+    const second = await collect({ collector: 'rest', wpUrl: 'https://example.test', restConcurrency: 2 });
+
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(sourceHash(first)).toBe(sourceHash(second));
+  });
+
   it('warns but still returns a manifest when the REST root index is unreadable', async () => {
     stubFetch((url) => {
-      if (url.endsWith('/wp-json/')) {
+      if (new URL(url).pathname === '/wp-json/') {
         return { body: {}, ok: false, status: 500 };
       }
       return defaultRoutes(url);
