@@ -63,6 +63,33 @@ consumer can share — instead of each agent re-deriving brittle introspection o
   eval anything from it. Wesper reads; it does not register sources, create fields, or run a
   service.
 
+## Hash and validation contract
+
+`provenance.sourceHash` is the SHA-256 fingerprint of the final collected document. Before it is
+calculated, Wesper redacts credential-shaped values, applies schema defaults, validates the
+document, and sorts only collections whose order has no meaning (such as plugins, block types,
+and registered image sizes). `collectedAt` and `sourceHash` itself are excluded. Arrays whose
+order is content, including `theme.settings` arrays, are preserved. Canonical JSON is RFC 8785
+(JCS, UTF-8): object names are ordered by UTF-16 code units and finite JSON numbers use the
+ECMAScript JSON representation.
+
+`validate()` and `wesper validate` establish **schema validity**, redact returned data, and apply
+schema defaults. They deliberately do **not** establish **hash integrity**: a structurally valid
+manifest may contain a stale or altered `provenance.sourceHash`. Consumers that require integrity
+must make the explicit comparison after validation:
+
+```ts
+const result = validate(manifest);
+const hasIntegrity = Boolean(
+  result.ok && result.context && sourceHash(result.context) === result.context.provenance.sourceHash,
+);
+```
+
+Collector builds that predate this contract hashed before defaults were materialized. Re-collect
+those manifests (or validate them and recompute the fingerprint) before using their source hash
+as an integrity assertion. The hash continues to represent redacted manifest content with the
+same volatile provenance fields excluded.
+
 ## Consumer contract: the binding join
 
 Binding consumers join two manifest slices before writing `metadata.bindings`:

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { canonicalize, sourceHash } from './canonical.js';
+import { normalizeCollectorOutput } from './collector/normalize.js';
 import { redactSecrets } from './redact.js';
 import { siteContextJsonSchema } from './schema.js';
 import { parseThemeJsonSettings } from './theme.js';
@@ -22,6 +23,19 @@ describe('validation', () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors.some((error) => error.path === 'contextVersion')).toBe(true);
+  });
+
+  it('rejects patterns without usable string identifiers', () => {
+    const result = validate(
+      fixture({
+        patterns: { items: [{ name: 0 }, { name: '   ' }] },
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.map((error) => error.path)).toEqual(
+      expect.arrayContaining(['patterns.items.0.name', 'patterns.items.1.name']),
+    );
   });
 
   it('includes nested binding warnings in validation results', () => {
@@ -67,6 +81,69 @@ describe('validation', () => {
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.context?.$schema).toBe(SCHEMA_URL);
+  });
+
+  it('keeps missing raw evidence from becoming complete through schema defaults', () => {
+    const result = validate({
+      contextVersion: 1,
+      site: {},
+      provenance: {
+        collectedAt: '2026-06-25T00:00:00.000Z',
+        collector: 'fixture',
+        collectorVersion: 'test',
+        sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      },
+      warnings: [],
+      blocks: {},
+      bindings: { available: true },
+      contentModel: {},
+    });
+
+    expect(result.ok).toBe(true);
+    const context = result.context as SiteContext;
+    const summary = summarize(context);
+
+    expect(context.provenance.partial).toBe(true);
+    expect(summary.coverage).toMatchObject({
+      blocks: 'partial',
+      bindings: 'partial',
+      contentModel: 'partial',
+    });
+    expect(summary.supportedWork).not.toContain(
+      'Create bindings by joining the reported block attributes with the reported post-type fields.',
+    );
+    expect(summary.unknownWork).toEqual(
+      expect.arrayContaining([expect.stringContaining('Complete binding work is not supported until')]),
+    );
+    expect(context.provenance.sourceHash).toBe(
+      'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    );
+    expect(sourceHash(context)).not.toBe(context.provenance.sourceHash);
+
+    const roundTrip = validate(JSON.parse(stringifyManifest(context)));
+    expect(roundTrip.ok).toBe(true);
+    expect(roundTrip.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+  });
+
+  it('keeps explicit unavailable bindings distinct from missing binding discovery', () => {
+    const result = validate({
+      contextVersion: 1,
+      site: {},
+      provenance: {
+        collectedAt: '2026-06-25T00:00:00.000Z',
+        collector: 'fixture',
+        collectorVersion: 'test',
+        sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      },
+      warnings: [],
+      blocks: { types: [] },
+      bindings: { available: false },
+      contentModel: { postTypes: [] },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(summarize(result.context as SiteContext).coverage.bindings).toBe('unavailable');
+    expect(result.context?.warnings).not.toContainEqual(expect.objectContaining({ code: 'bindings.invalid_evidence' }));
   });
 
   it('exports an input JSON Schema with only raw input requirements', () => {
@@ -120,21 +197,36 @@ describe('validation', () => {
 
     expect(result.ok).toBe(true);
     expect(result.warnings).toContainEqual({
-      code: 'absent_without_warning',
+      code: 'patterns.absent_evidence',
       severity: 'warning',
       surface: 'patterns',
-      message: 'Manifest section "patterns" is absent without a matching warning.',
+      message: 'The manifest omits patterns evidence; the surface is unavailable rather than empty.',
+      coverage: 'unavailable',
     });
+  });
+
+  it('keeps schema validity separate from source-hash integrity', () => {
+    const manifest = fixture();
+    (manifest.provenance as Record<string, unknown>).sourceHash = sourceHash(manifest);
+    (manifest.site as Record<string, unknown>).name = 'Changed after collection';
+
+    const result = validate(manifest);
+
+    // validate() accepts structurally valid documents; callers opt in to this
+    // explicit comparison when they need to attest content integrity.
+    expect(result.ok).toBe(true);
+    expect(result.context).toBeDefined();
+    expect(sourceHash(result.context)).not.toBe(result.context?.provenance.sourceHash);
   });
 });
 
 describe('sourceHash and redaction', () => {
   it('canonicalizes object keys by RFC 8785 code-unit order regardless of process locale', () => {
     const originalLang = process.env.LANG;
-    const value = { Z: true, a: true, _internal: true, '40': true };
+    const value = { Z: true, a: true, _internal: true, '2': true, '10': true };
 
     try {
-      const expected = '{"40":true,"Z":true,"_internal":true,"a":true}';
+      const expected = '{"10":true,"2":true,"Z":true,"_internal":true,"a":true}';
       process.env.LANG = 'sv_SE.UTF-8';
       expect(canonicalize(value)).toBe(expected);
 
@@ -145,6 +237,73 @@ describe('sourceHash and redaction', () => {
     } finally {
       process.env.LANG = originalLang;
     }
+  });
+
+  it('matches the RFC 8785 UTF-16 member-name sorting vector', () => {
+    const value = {
+      '\u20ac': 'Euro Sign',
+      '\r': 'Carriage Return',
+      '\ufb33': 'Hebrew Letter Dalet With Dagesh',
+      '1': 'One',
+      '\ud83d\ude00': 'Emoji: Grinning Face',
+      '\u0080': 'Control',
+      '\u00f6': 'Latin Small Letter O With Diaeresis',
+    };
+
+    expect(canonicalize(value)).toBe(
+      '{"\\r":"Carriage Return","1":"One","":"Control","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","דּ":"Hebrew Letter Dalet With Dagesh"}',
+    );
+  });
+
+  it('matches RFC 8785 number and string serialization examples', () => {
+    expect(
+      canonicalize({
+        numbers: [333333333.33333329, 1e30, 4.5, 2e-3, 1e-27, -0],
+        string: "€$\u000f\nA'B\"\\\"/",
+        literals: [null, true, false],
+      }),
+    ).toBe(
+      '{"literals":[null,true,false],"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27,0],"string":"€$\\u000f\\nA\'B\\\"\\\\\\\"/"}',
+    );
+  });
+
+  it('matches every finite RFC 8785 Appendix B number serialization vector', () => {
+    const finiteVectors = [
+      ['0000000000000000', '0'],
+      ['8000000000000000', '0'],
+      ['0000000000000001', '5e-324'],
+      ['8000000000000001', '-5e-324'],
+      ['7fefffffffffffff', '1.7976931348623157e+308'],
+      ['ffefffffffffffff', '-1.7976931348623157e+308'],
+      ['4340000000000000', '9007199254740992'],
+      ['c340000000000000', '-9007199254740992'],
+      ['4430000000000000', '295147905179352830000'],
+      ['44b52d02c7e14af5', '9.999999999999997e+22'],
+      ['44b52d02c7e14af6', '1e+23'],
+      ['44b52d02c7e14af7', '1.0000000000000001e+23'],
+      ['444b1ae4d6e2ef4e', '999999999999999700000'],
+      ['444b1ae4d6e2ef4f', '999999999999999900000'],
+      ['444b1ae4d6e2ef50', '1e+21'],
+      ['3eb0c6f7a0b5ed8c', '9.999999999999997e-7'],
+      ['3eb0c6f7a0b5ed8d', '0.000001'],
+      ['41b3de4355555553', '333333333.3333332'],
+      ['41b3de4355555554', '333333333.33333325'],
+      ['41b3de4355555555', '333333333.3333333'],
+      ['41b3de4355555556', '333333333.3333334'],
+      ['41b3de4355555557', '333333333.33333343'],
+      ['becbf647612f3696', '-0.0000033333333333333333'],
+      ['43143ff3c1cb0959', '1424953923781206.2'],
+    ] as const;
+
+    for (const [ieee754, serialized] of finiteVectors) {
+      expect(canonicalize(numberFromIeee754Hex(ieee754))).toBe(serialized);
+    }
+  });
+
+  it('rejects values outside the RFC 8785 JSON data model', () => {
+    expect(() => canonicalize({ value: Number.NaN })).toThrow('finite numbers');
+    expect(() => canonicalize({ value: Number.POSITIVE_INFINITY })).toThrow('finite numbers');
+    expect(() => canonicalize({ value: '\ud800' })).toThrow('lone surrogate');
   });
 
   it('excludes collectedAt and sourceHash from the hash', () => {
@@ -226,6 +385,89 @@ describe('theme tokens', () => {
         { slug: 'large', value: '2rem' },
       ],
     });
+  });
+
+  it('keeps provenance stable when preset origins with the same slug are reordered', () => {
+    const settings = (reversed: boolean) => ({
+      color: {
+        palette: reversed
+          ? {
+              user: [{ slug: 'primary', name: 'User primary', color: '#cc0000' }],
+              theme: [{ slug: 'primary', name: 'Theme primary', color: '#0057ff' }],
+            }
+          : {
+              theme: [{ slug: 'primary', name: 'Theme primary', color: '#0057ff' }],
+              user: [{ slug: 'primary', name: 'User primary', color: '#cc0000' }],
+            },
+      },
+    });
+    const normalize = (themeSettings: Record<string, unknown>) =>
+      normalizeCollectorOutput(
+        { site: {}, theme: { settings: themeSettings }, warnings: [] },
+        { collector: 'wp-cli', collectorVersion: 'test' },
+      );
+
+    const first = normalize(settings(false));
+    const second = normalize(settings(true));
+
+    expect(first.theme?.themeJsonHash).toBe(second.theme?.themeJsonHash);
+    expect(first.theme?.tokens.colors).toEqual([
+      { slug: 'primary', name: 'Theme primary', value: '#0057ff' },
+      { slug: 'primary', name: 'User primary', value: '#cc0000' },
+    ]);
+    expect(second.theme?.tokens).toEqual(first.theme?.tokens);
+    expect(first.provenance.sourceHash).toBe(second.provenance.sourceHash);
+  });
+
+  it('marks a missing site surface unavailable even when every other collector surface is complete', () => {
+    const context = normalizeCollectorOutput(
+      {
+        wordpress: {},
+        theme: { settings: {} },
+        plugins: [],
+        blocks: { types: [] },
+        bindings: { available: true, sources: [], supportedAttributes: {}, warnings: [] },
+        contentModel: { postTypes: [] },
+        patterns: { items: [] },
+        media: { imageSizes: [] },
+        warnings: [
+          {
+            code: 'site.unavailable',
+            severity: 'warning',
+            surface: 'site',
+            message: 'Site metadata was not returned by the collector.',
+            coverage: 'unavailable',
+          },
+        ],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.provenance.partial).toBe(true);
+    expect(summarize(context).coverage.site).toBe('unavailable');
+    const roundTrip = validate(JSON.parse(stringifyManifest(context)));
+    expect(roundTrip.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+  });
+
+  it('materializes omitted collector evidence before hashing so validation does not alter the document', () => {
+    const context = normalizeCollectorOutput(
+      { site: {}, warnings: [] },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.warnings).toContainEqual({
+      code: 'blocks.absent_evidence',
+      severity: 'warning',
+      surface: 'blocks',
+      message: 'The collector omitted blocks evidence; the surface is unavailable rather than empty.',
+      coverage: 'unavailable',
+    });
+    expect(context.provenance.partial).toBe(true);
+
+    const serialized = stringifyManifest(context);
+    const validated = validate(JSON.parse(serialized));
+    expect(validated.context?.provenance.sourceHash).toBe(context.provenance.sourceHash);
+    expect(stringifyManifest(validated.context as SiteContext)).toBe(serialized);
   });
 });
 
@@ -357,6 +599,13 @@ describe('package metadata', () => {
     expect(publicMetadata).not.toMatch(/\b(?:abilities|mcp|acf|diff|freshness|ttl)\b/i);
   });
 });
+
+function numberFromIeee754Hex(hex: string): number {
+  const bytes = new ArrayBuffer(8);
+  const view = new DataView(bytes);
+  view.setBigUint64(0, BigInt(`0x${hex}`), false);
+  return view.getFloat64(0, false);
+}
 
 function fixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const base = {

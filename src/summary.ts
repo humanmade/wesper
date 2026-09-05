@@ -163,6 +163,8 @@ function supportedWorkFor(surface: CollectionSurface, status: CoverageStatus): s
   const qualifier = partial ? 'Use only the reported' : 'Use the reported';
 
   switch (surface) {
+    case 'site':
+      return [`${qualifier} site metadata${partial ? '; site evidence is incomplete.' : '.'}`];
     case 'wordpress':
       return [`${qualifier} WordPress version and capabilities${partial ? '; unreported capabilities remain unknown.' : '.'}`];
     case 'theme':
@@ -190,6 +192,7 @@ function unknownWorkFor(surface: CollectionSurface, status: CoverageStatus): str
   }
 
   const subject = {
+    site: 'Site metadata',
     wordpress: 'WordPress version and capability evidence',
     theme: 'Theme settings and token evidence',
     plugins: 'Plugin evidence',
@@ -230,6 +233,7 @@ function bindingWorkFor(surfaceCoverage: SurfaceCoverage[]): { supported: string
 
 function surfaceLabel(surface: CollectionSurface): string {
   return {
+    site: 'site metadata',
     wordpress: 'WordPress capability',
     theme: 'theme',
     plugins: 'plugin',

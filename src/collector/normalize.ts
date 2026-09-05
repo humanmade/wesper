@@ -1,4 +1,4 @@
-import { sourceHash } from '../canonical.js';
+import { canonicalize, sourceHash } from '../canonical.js';
 import { redactSecrets } from '../redact.js';
 import { siteContextSchema } from '../schema.js';
 import { parseThemeJsonSettings, themeWarnings } from '../theme.js';
@@ -11,14 +11,17 @@ export function normalizeCollectorOutput(
   raw: Record<string, unknown>,
   opts: { collector: 'wp-cli' | 'rest'; collectorVersion: string },
 ): SiteContext {
-  const warnings = warningArray(raw.warnings);
-  const themeRaw = completeRecordSection(raw, 'theme', ['settings']);
+  // Redact before deriving either hash. This also makes every subsequent
+  // normalization step operate on the exact content we may return.
+  const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
+  const warnings = warningArray(redactedRaw.warnings);
+  const themeRaw = completeRecordSection(redactedRaw, 'theme', ['settings']);
   if (themeRaw) {
     const settings = themeRaw.settings;
     warnings.push(...themeWarnings(settings));
   }
 
-  const site = recordOrUndefined(raw.site);
+  const site = recordOrUndefined(redactedRaw.site);
   if (!site) {
     warnings.push({
       code: 'site.unavailable',
@@ -40,16 +43,16 @@ export function normalizeCollectorOutput(
       collector: opts.collector,
       collectorVersion: opts.collectorVersion,
       sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
-      partial: false,
+    partial: false,
     },
     warnings,
   };
-  const wordpress = recordOrUndefined(raw.wordpress);
-  warnIfMalformed(warnings, raw, 'wordpress', Boolean(wordpress));
+  const wordpress = recordOrUndefined(redactedRaw.wordpress);
+  warnIfMalformed(warnings, redactedRaw, 'wordpress', Boolean(wordpress));
   if (wordpress) {
     collected.wordpress = wordpress;
   }
-  warnIfMalformed(warnings, raw, 'theme', Boolean(themeRaw));
+  warnIfMalformed(warnings, redactedRaw, 'theme', Boolean(themeRaw));
   if (themeRaw) {
     const settings = themeRaw.settings;
     collected.theme = {
@@ -57,73 +60,80 @@ export function normalizeCollectorOutput(
       // REST global-styles exposes the user-customization layer, not the fully merged
       // theme.json settings WP-CLI reads via wp_get_global_settings(); stamp the origin honestly.
       settingsOrigin: opts.collector === 'rest' ? 'custom' : 'merged',
-      themeJsonHash: settings ? sourceHash({ settings }) : undefined,
+      ...(settings === undefined ? {} : { themeJsonHash: sourceHash({ settings }) }),
       tokens: parseThemeJsonSettings(settings),
-      settings,
+      ...(settings === undefined ? {} : { settings }),
     };
   }
-  const plugins = raw.plugins;
+  const plugins = redactedRaw.plugins;
   const validPlugins = recordArray(plugins);
-  warnIfMalformed(warnings, raw, 'plugins', validPlugins);
+  warnIfMalformed(warnings, redactedRaw, 'plugins', validPlugins);
   if (validPlugins) {
-    collected.plugins = plugins;
+    collected.plugins = sortPlugins(plugins);
   }
-  const blocks = recordWithRecordArray(raw, 'blocks', 'types');
-  warnIfMalformed(warnings, raw, 'blocks', Boolean(blocks));
+  const blocks = recordWithRecordArray(redactedRaw, 'blocks', 'types');
+  warnIfMalformed(warnings, redactedRaw, 'blocks', Boolean(blocks));
   if (blocks) {
     collected.blocks = {
       types: sortByName(array(blocks.types)),
     };
   }
-  const bindingsRaw = bindingSection(raw);
-  warnIfMalformed(warnings, raw, 'bindings', Boolean(bindingsRaw));
+  const bindingsRaw = bindingSection(redactedRaw);
+  warnIfMalformed(warnings, redactedRaw, 'bindings', Boolean(bindingsRaw));
   if (bindingsRaw) {
     collected.bindings = {
       available: bindingsRaw.available,
-      sources: sortByName(array(bindingsRaw.sources)),
+      sources: sortBindingSources(array(bindingsRaw.sources)),
       supportedAttributes: sortSupportedAttributes(record(bindingsRaw.supportedAttributes)),
-      warnings: warningArray(bindingsRaw.warnings),
+      warnings: sortWarnings(warningArray(bindingsRaw.warnings)),
     };
   }
-  const contentModel = recordWithRecordArray(raw, 'contentModel', 'postTypes');
+  const contentModel = recordWithRecordArray(redactedRaw, 'contentModel', 'postTypes');
   const completeContentModel = contentModel && hasCompletePostTypes(contentModel.postTypes) ? contentModel : undefined;
-  warnIfMalformed(warnings, raw, 'contentModel', Boolean(completeContentModel));
+  warnIfMalformed(warnings, redactedRaw, 'contentModel', Boolean(completeContentModel));
   if (completeContentModel) {
     collected.contentModel = {
       postTypes: sortPostTypes(array(completeContentModel.postTypes)),
     };
   }
-  const patterns = recordWithRecordArray(raw, 'patterns', 'items');
-  warnIfMalformed(warnings, raw, 'patterns', Boolean(patterns));
+  const patterns = recordWithRecordArray(redactedRaw, 'patterns', 'items');
+  warnIfMalformed(warnings, redactedRaw, 'patterns', Boolean(patterns));
   if (patterns) {
     collected.patterns = {
-      items: sortByName(array(patterns.items)),
+      items: sortPatterns(array(patterns.items)),
     };
   }
-  const media = recordWithRecordArray(raw, 'media', 'imageSizes');
-  warnIfMalformed(warnings, raw, 'media', Boolean(media));
+  const media = recordWithRecordArray(redactedRaw, 'media', 'imageSizes');
+  warnIfMalformed(warnings, redactedRaw, 'media', Boolean(media));
   if (media) {
-    collected.media = media;
+    collected.media = {
+      ...media,
+      imageSizes: sortByName(array(media.imageSizes)),
+    };
   }
 
   // Coverage derives from explicit observed surfaces and evidence-gap warnings,
   // never from severity. In particular, informational REST gaps still make the
   // manifest partial and are considered by strict collection.
-  const normalizedEvidence = siteContextSchema.parse(collected);
+  materializeOmittedEvidence(warnings, collected);
+  collected.warnings = sortWarnings(warnings);
+  const normalizedEvidence = siteContextSchema.parse(withoutUndefined(collected));
   (collected.provenance as Record<string, unknown>).partial = coverageFor(normalizedEvidence).some(
     (coverage) => coverage.status !== 'complete',
   );
-  const contextWithoutHash = redactSecrets(collected);
 
-  const context = {
-    ...contextWithoutHash,
+  // Defaults are part of the returned document, so materialize and validate them
+  // before hashing. The final redaction pass is intentional defense in depth for
+  // values synthesized during normalization.
+  const normalized = siteContextSchema.parse(withoutUndefined(collected));
+  const redacted = siteContextSchema.parse(redactSecrets(normalized));
+  return {
+    ...redacted,
     provenance: {
-      ...(contextWithoutHash.provenance as Record<string, unknown>),
-      sourceHash: sourceHash(contextWithoutHash),
+      ...redacted.provenance,
+      sourceHash: sourceHash(redacted),
     },
   };
-
-  return siteContextSchema.parse(context);
 }
 
 function warningArray(value: unknown): ContextWarning[] {
@@ -207,8 +217,7 @@ function bindingSourceArray(value: unknown): value is Array<Record<string, unkno
         hasOwn(record, 'usesContext') &&
         Array.isArray(record.usesContext) &&
         record.usesContext.every((item) => typeof item === 'string') &&
-        hasOwn(record, 'argsSchema') &&
-        isJsonValue(record.argsSchema) &&
+        (!hasOwn(record, 'argsSchema') || isJsonValue(record.argsSchema)) &&
         (!hasOwn(record, 'label') || record.label === null || typeof record.label === 'string'),
     );
   });
@@ -249,6 +258,37 @@ function warnIfMalformed(
   }
 }
 
+function materializeOmittedEvidence(warnings: ContextWarning[], collected: Record<string, unknown>): void {
+  for (const surface of COLLECTION_SURFACES) {
+    if (collected[surface] !== undefined || hasSurfaceWarning(warnings, surface)) {
+      continue;
+    }
+    warnings.push({
+      code: `${surface}.absent_evidence`,
+      severity: 'warning',
+      surface,
+      message: `The collector omitted ${surface} evidence; the surface is unavailable rather than empty.`,
+      coverage: 'unavailable',
+    });
+  }
+}
+
+const COLLECTION_SURFACES = [
+  'site',
+  'wordpress',
+  'theme',
+  'plugins',
+  'blocks',
+  'bindings',
+  'contentModel',
+  'patterns',
+  'media',
+] as const;
+
+function hasSurfaceWarning(warnings: ContextWarning[], surface: string): boolean {
+  return warnings.some((warning) => warning.surface === surface || warning.surface.startsWith(`${surface}.`));
+}
+
 function hasOwn(value: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
@@ -260,16 +300,25 @@ function array(value: unknown): Array<Record<string, unknown>> {
 }
 
 function sortByName(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
-  return [...items].sort((left, right) =>
-    compareStrings(String(left.name ?? left.key ?? ''), String(right.name ?? right.key ?? '')),
-  );
+  return sortByFields(items, ['name', 'key']);
+}
+
+function sortPlugins(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByFields(items, ['slug', 'name']);
+}
+
+function sortBindingSources(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByName(items).map((source) => ({
+    ...source,
+    usesContext: sortStrings(source.usesContext),
+  }));
 }
 
 function sortPostTypes(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return sortByName(items).map((postType) => ({
     ...postType,
     fields: sortByName(array(postType.fields)),
-    taxonomies: Array.isArray(postType.taxonomies) ? postType.taxonomies.map(String).sort(compareStrings) : [],
+    taxonomies: sortStrings(postType.taxonomies),
   }));
 }
 
@@ -279,11 +328,68 @@ function sortSupportedAttributes(value: Record<string, unknown>): Record<string,
       .sort(([left], [right]) => compareStrings(left, right))
       .map(([blockName, attributes]) => [
         blockName,
-        Array.isArray(attributes) ? attributes.map(String).sort(compareStrings) : [],
+        sortStrings(attributes),
       ]),
   );
 }
 
+function sortPatterns(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByName(items).map((pattern) => sortSetProperties(pattern, ['categories', 'blockTypes', 'postTypes']));
+}
+
+function sortSetProperties(item: Record<string, unknown>, properties: string[]): Record<string, unknown> {
+  const sorted = { ...item };
+  for (const property of properties) {
+    if (Array.isArray(item[property])) {
+      sorted[property] = sortStrings(item[property]);
+    }
+  }
+  return sorted;
+}
+
+function sortWarnings(warnings: ContextWarning[]): ContextWarning[] {
+  return [...warnings].sort((left, right) => {
+    for (const field of ['surface', 'code', 'severity', 'message'] as const) {
+      const comparison = compareStrings(left[field], right[field]);
+      if (comparison !== 0) {
+        return comparison;
+      }
+    }
+    return 0;
+  });
+}
+
+function sortByFields(items: Array<Record<string, unknown>>, fields: string[]): Array<Record<string, unknown>> {
+  return [...items].sort((left, right) => {
+    for (const field of fields) {
+      const comparison = compareStrings(String(left[field] ?? ''), String(right[field] ?? ''));
+      if (comparison !== 0) {
+        return comparison;
+      }
+    }
+    return compareStrings(canonicalize(left), canonicalize(right));
+  });
+}
+
+function sortStrings(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).sort(compareStrings) : [];
+}
+
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function withoutUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => (item === undefined ? null : withoutUndefined(item)));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, nested]) => nested !== undefined)
+      .map(([key, nested]) => [key, withoutUndefined(nested)]),
+  );
 }

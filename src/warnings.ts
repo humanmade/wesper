@@ -1,6 +1,6 @@
 import type { ContextWarning, SiteContext } from './types.js';
 
-const CONTENT_SECTIONS = ['wordpress', 'theme', 'plugins', 'blocks', 'bindings', 'contentModel', 'patterns', 'media'] as const;
+const CONTENT_SECTIONS = ['site', 'wordpress', 'theme', 'plugins', 'blocks', 'bindings', 'contentModel', 'patterns', 'media'] as const;
 
 /**
  * Evidence a binding consumer needs before it can safely propose bindings. Other
