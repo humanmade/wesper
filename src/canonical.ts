@@ -36,6 +36,7 @@ export function withoutVolatileProvenance(value: unknown): unknown {
   if (provenance && typeof provenance === 'object' && !Array.isArray(provenance)) {
     delete (provenance as Record<string, unknown>).collectedAt;
     delete (provenance as Record<string, unknown>).sourceHash;
+    delete (provenance as Record<string, unknown>).collectionMetrics;
   }
   return clone;
 }

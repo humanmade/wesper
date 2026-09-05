@@ -46,8 +46,8 @@ consumer can share — instead of each agent re-deriving brittle introspection o
 ## Theme token contract
 
 `theme.tokens.presets` is the consumer-facing effective preset list. Each token has a stable
-`id` (`<kind>:<slug>`), `kind`, WordPress `slug`, declared `label` when supplied, effective
-`value`, and `origin`. Kinds are `color`, `font-family`, `font-size`, and `spacing`; font
+`id` (`<kind>:<slug>`), `kind`, WordPress `slug`, declared `label` when supplied, `value`,
+`valueSource`, and `origin`. Kinds are `color`, `font-family`, `font-size`, and `spacing`; font
 families and sizes are also available separately in `fontFamilies` and `fontSizes`. The legacy
 mixed `typography` array remains readable for V1 manifests but collectors do not emit it.
 
@@ -57,10 +57,11 @@ Every collected token includes native forms in `references`: `cssCustomProperty`
 style attribute; it does not need to recreate WordPress preset syntax. Wesper never infers roles
 such as “primary” from a slug or value.
 
-`theme.settings` retains the effective settings and their constraints (for example custom colour,
+`theme.settings` retains the collected settings and their constraints (for example custom colour,
 typography, spacing, layout, and unit controls). Its `settingsOrigin` is the exact layer read:
-`merged` for WP-CLI (`core + blocks + theme + user`), `theme` for REST’s themes endpoint
-(`core + blocks + theme`), and `custom` only when a custom-only source is collected. Missing
+`merged` for WP-CLI (`core + blocks + theme + user`) and `custom` for REST global styles. A
+font-size token’s `valueSource` is `resolved` when WP-CLI asked WordPress for the CSS custom
+property value (including fluid `clamp(...)` values); otherwise it is `declared`. Missing
 settings leave the theme evidence absent; they are not represented as a known empty token set.
 Within origin buckets Wesper resolves a duplicate kind/slug using WordPress precedence:
 `core < blocks < theme < user`. Buckets without a supported public origin label (including
@@ -163,6 +164,11 @@ wesper collect --rest --wp-url <site-root> --wp-user <user> --out site.context.j
 wesper validate site.context.json
 wesper summarize site.context.json
 ```
+
+REST collection accepts `--timeout-ms`, `--rest-concurrency`, and
+`--max-response-bytes` to bound end-to-end execution, parallel requests, and
+individual response payloads. Library callers can pass the corresponding
+`CollectOptions` fields and an `AbortSignal`.
 
 ### Exit status
 

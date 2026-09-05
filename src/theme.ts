@@ -65,17 +65,27 @@ function nestedArrayValue(values: unknown, bucket: string, index: number): strin
     : undefined;
 }
 
-/** Matches WordPress `_wp_to_kebab_case()` for theme.json's slug grammar. */
+/** Exact port of WordPress `_wp_to_kebab_case()` for theme.json preset slugs. */
 function normalizePresetSlug(slug: string): string {
-  return slug
-    .replace(/[’']/g, '')
-    .replace(/([a-z\d])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
-    .replace(/([A-Za-z])(\d+)/g, '$1-$2')
-    .replace(/(\d+)([A-Za-z])/g, '$1-$2')
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
+  const lower = 'a-z\\u00df-\\u00f6\\u00f8-\\u00ff';
+  const upper = 'A-Z\\u00c0-\\u00d6\\u00d8-\\u00de';
+  const breaks = '\\u0000-\\u002f\\u003a-\\u0040\\u005b-\\u0060\\u007b-\\u00bf\\u2000-\\u206f \\t\\v\\f\\u00a0\\ufeff\\n\\r\\u2028\\u2029\\u1680\\u180e\\u202f\\u205f\\u3000';
+  const lowerChar = `[${lower}]`;
+  const upperChar = `[${upper}]`;
+  const breakChar = `[${breaks}]`;
+  const misc = `[^${breaks}\\d${lower}${upper}]`;
+  const miscLower = `(?:${lowerChar}|${misc})`;
+  const miscUpper = `(?:${upperChar}|${misc})`;
+  const expression = new RegExp([
+    `${upperChar}?${lowerChar}+(?=${breakChar}|${upperChar}|$)`,
+    `${miscUpper}+(?=${breakChar}|${upperChar}${miscLower}|$)`,
+    `${upperChar}?${miscLower}+`,
+    `${upperChar}+`,
+    '\\d*(?:1ST|2ND|3RD|(?![123])\\dTH)(?=\\b|[a-z_])',
+    '\\d*(?:1st|2nd|3rd|(?![123])\\dth)(?=\\b|[A-Z_])',
+    '\\d+',
+  ].join('|'), 'gu');
+  return (slug.replaceAll("'", '').match(expression) ?? []).join('-').toLowerCase();
 }
 function originForBucket(bucket: string): { origin: ThemeTokenOrigin; precedence: number } {
   switch (bucket) {

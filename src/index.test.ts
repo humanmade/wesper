@@ -658,6 +658,14 @@ describe('theme tokens', () => {
     expect(tokens.colors).toEqual([expect.objectContaining({ slug: 'brand-primary', value: '#222' })]);
   });
 
+  it('matches WordPress ordinal slug normalization', () => {
+    const tokens = parseThemeJsonSettings({
+      color: { palette: [{ slug: '1stHeading', color: '#111' }] },
+    });
+
+    expect(tokens.colors).toEqual([expect.objectContaining({ slug: '1st-heading' })]);
+  });
+
   it('uses WordPress-resolved font-size values when the collector provides them', () => {
     const settings = {
       typography: {

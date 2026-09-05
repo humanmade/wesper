@@ -116,6 +116,31 @@
         "partial": {
           "default": false,
           "type": "boolean"
+        },
+        "collectionMetrics": {
+          "type": "object",
+          "properties": {
+            "latencyMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "responseBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "requests": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "latencyMs",
+            "responseBytes",
+            "requests"
+          ]
         }
       },
       "required": [
@@ -173,7 +198,6 @@
           "type": "string"
         },
         "settingsOrigin": {
-          "default": "merged",
           "type": "string",
           "enum": [
             "merged",
@@ -182,13 +206,6 @@
           ]
         },
         "tokens": {
-          "default": {
-            "colors": [],
-            "spacing": [],
-            "fontFamilies": [],
-            "fontSizes": [],
-            "presets": []
-          },
           "type": "object",
           "properties": {
             "colors": {
@@ -212,21 +229,18 @@
               }
             },
             "fontFamilies": {
-              "default": [],
               "type": "array",
               "items": {
                 "$ref": "#/definitions/__schema7"
               }
             },
             "fontSizes": {
-              "default": [],
               "type": "array",
               "items": {
                 "$ref": "#/definitions/__schema7"
               }
             },
             "presets": {
-              "default": [],
               "type": "array",
               "items": {
                 "$ref": "#/definitions/__schema7"
@@ -341,6 +355,13 @@
           "type": "string",
           "minLength": 1
         },
+        "valueSource": {
+          "type": "string",
+          "enum": [
+            "resolved",
+            "declared"
+          ]
+        },
         "origin": {
           "type": "string",
           "enum": [
@@ -378,6 +399,7 @@
         "kind",
         "slug",
         "value",
+        "valueSource",
         "origin",
         "references"
       ],
@@ -642,6 +664,10 @@
             "partial",
             "unavailable"
           ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [

@@ -28,6 +28,9 @@ program
   .option('--rest', 'use the REST collector (App Password over core WP endpoints)')
   .option('--wp-user <user>', 'WordPress username for the REST collector (or WP_API_USERNAME)')
   .option('--ssh <target>', 'WP-CLI SSH target')
+  .option('--timeout-ms <milliseconds>', 'overall collector deadline in milliseconds', parsePositiveInteger)
+  .option('--rest-concurrency <count>', 'maximum simultaneous REST requests', parsePositiveInteger)
+  .option('--max-response-bytes <bytes>', 'maximum bytes accepted per REST response', parsePositiveInteger)
   .option('--strict', 'fail on partial required surfaces')
   .option('--out <path>', 'write the manifest to a file instead of stdout')
   .action(
@@ -39,6 +42,9 @@ program
       ssh?: string;
       strict?: boolean;
       out?: string;
+      timeoutMs?: number;
+      restConcurrency?: number;
+      maxResponseBytes?: number;
     }) => {
       try {
         if (options.rest && (options.wpPath || options.ssh)) {
@@ -53,6 +59,9 @@ program
               wpUser: options.wpUser ?? process.env.WP_API_USERNAME,
               wpAppPassword: process.env.WP_API_PASSWORD,
               strict: options.strict,
+              timeoutMs: options.timeoutMs,
+              restConcurrency: options.restConcurrency,
+              maxResponseBytes: options.maxResponseBytes,
             })
           : await collect({
               collector: 'wp-cli',
@@ -60,6 +69,7 @@ program
               wpUrl: options.wpUrl,
               ssh: options.ssh,
               strict: options.strict,
+              timeoutMs: options.timeoutMs,
             });
         await writeOutput(stringifyManifest(context), options.out);
         // A non-strict collection can legitimately return partial evidence. The manifest
@@ -193,4 +203,12 @@ function errorCode(error: unknown): string | undefined {
 function isCommanderSuccess(error: unknown): boolean {
   const code = errorCode(error);
   return code === 'commander.helpDisplayed' || code === 'commander.version';
+}
+
+function parsePositiveInteger(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new UsageError(`Expected a positive integer; received "${value}".`);
+  }
+  return parsed;
 }

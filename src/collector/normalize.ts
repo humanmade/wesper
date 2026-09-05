@@ -15,11 +15,8 @@ export function normalizeCollectorOutput(
   // normalization step operate on the exact content we may return.
   const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
   const warnings = warningArray(redactedRaw.warnings);
-  const themeRaw = recordOrUndefined(redactedRaw.theme);
-  if (themeRaw) {
-    const settings = themeRaw.settings;
-    warnings.push(...themeWarnings(settings));
-  }
+  const themeRaw = themeSection(redactedRaw);
+  if (themeRaw) warnings.push(...themeWarnings(themeRaw.settings));
 
   const site = recordOrUndefined(redactedRaw.site);
   if (!site) {
@@ -44,6 +41,7 @@ export function normalizeCollectorOutput(
       collectorVersion: opts.collectorVersion,
       sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
     partial: false,
+      ...collectorMetrics(redactedRaw.provenance),
     },
     warnings,
   };
@@ -59,9 +57,9 @@ export function normalizeCollectorOutput(
     const { fontSizeValues: _fontSizeValues, ...themeEvidence } = themeRaw;
     collected.theme = {
       ...themeEvidence,
-      // The REST themes endpoint uses get_merged_data('theme'); WP-CLI's
-      // wp_get_global_settings() also includes the custom/user layer.
-      ...(settingsAvailable ? { settingsOrigin: opts.collector === 'rest' ? 'theme' : 'merged' } : {}),
+      // REST global-styles exposes the user-customization layer, not the fully merged
+      // theme.json settings WP-CLI reads via wp_get_global_settings(); stamp the origin honestly.
+      ...(settingsAvailable ? { settingsOrigin: opts.collector === 'rest' ? 'custom' : 'merged' } : {}),
       ...(settingsAvailable ? { themeJsonHash: sourceHash({ settings }) } : {}),
       ...(settingsAvailable ? { tokens: parseThemeJsonSettings(settings, themeRaw.fontSizeValues) } : {}),
       ...(settingsAvailable ? { settings } : {}),
@@ -142,6 +140,12 @@ export function normalizeCollectorOutput(
   };
 }
 
+function collectorMetrics(value: unknown): Record<string, unknown> {
+  const provenance = recordOrUndefined(value);
+  const metrics = provenance && recordOrUndefined(provenance.collectionMetrics);
+  return metrics ? { collectionMetrics: metrics } : {};
+}
+
 function warningArray(value: unknown): ContextWarning[] {
   if (!Array.isArray(value)) {
     return [];
@@ -177,6 +181,12 @@ function completeRecordSection(
 ): Record<string, unknown> | undefined {
   const value = recordOrUndefined(raw[section]);
   return value && requiredKeys.every((key) => hasOwn(value, key)) ? value : undefined;
+}
+
+function themeSection(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const value = recordOrUndefined(raw.theme);
+  const evidenceKeys = ['settings', 'stylesheet', 'template', 'name', 'version', 'isBlockTheme'];
+  return value && evidenceKeys.some((key) => hasOwn(value, key)) ? value : undefined;
 }
 
 function recordWithRecordArray(
