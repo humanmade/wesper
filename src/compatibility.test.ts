@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkBindingReference,
   checkTokenReference,
+  stringifyManifest,
   validate,
   type SiteContext,
 } from './index.js';
@@ -167,6 +168,67 @@ describe('reference compatibility', () => {
     ]));
   });
 
+  it('keeps complete source evidence compatible with a defaulted supported-attribute registry across round trips', () => {
+    const raw = rawFixture();
+    delete raw.bindings.supportedAttributes;
+
+    const first = validate(raw);
+    expect(first.ok).toBe(true);
+    expect(first.warnings).toEqual([defaultedBindingChildWarning('supportedAttributes')]);
+
+    const context = first.context as SiteContext;
+    const result = checkBindingReference(context, { ...PRICE, source: 'missing/source' });
+    expect(result).toMatchObject({
+      status: 'incompatible',
+      sourceManifestHash: HASH,
+    });
+    expect(result.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'binding_source.absent',
+        coverage: 'complete',
+        evidence: ['bindings.sources.missing/source'],
+      }),
+      expect.objectContaining({ code: 'binding_attribute.unknown', coverage: 'partial' }),
+    ]));
+
+    const roundTrip = validate(JSON.parse(stringifyManifest(context)));
+    expect(roundTrip.ok).toBe(true);
+    expect(roundTrip.warnings).toEqual(first.warnings);
+    expect(checkBindingReference(roundTrip.context as SiteContext, { ...PRICE, source: 'missing/source' })).toEqual(result);
+  });
+
+  it('keeps complete supported-attribute evidence compatible with a defaulted source registry across round trips', () => {
+    const raw = rawFixture();
+    delete raw.bindings.sources;
+    for (const postType of raw.contentModel.postTypes) {
+      for (const field of postType.fields) field.bindable = false;
+    }
+
+    const first = validate(raw);
+    expect(first.ok).toBe(true);
+    expect(first.warnings).toEqual([defaultedBindingChildWarning('sources')]);
+
+    const context = first.context as SiteContext;
+    const result = checkBindingReference(context, { ...PRICE, attribute: 'missing' });
+    expect(result).toMatchObject({
+      status: 'incompatible',
+      sourceManifestHash: HASH,
+    });
+    expect(result.reasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'binding_attribute.absent',
+        coverage: 'complete',
+        evidence: ['bindings.supportedAttributes.core/paragraph.missing'],
+      }),
+      expect.objectContaining({ code: 'binding_source.unknown', coverage: 'partial' }),
+    ]));
+
+    const roundTrip = validate(JSON.parse(stringifyManifest(context)));
+    expect(roundTrip.ok).toBe(true);
+    expect(roundTrip.warnings).toEqual(first.warnings);
+    expect(checkBindingReference(roundTrip.context as SiteContext, { ...PRICE, attribute: 'missing' })).toEqual(result);
+  });
+
   it('identifies every supplied field selector component in evidence', () => {
     const result = checkBindingReference(validContext(), {
       ...PRICE,
@@ -195,6 +257,17 @@ describe('reference compatibility', () => {
 
 function warning(code: string, surface: string, coverage: 'partial' | 'unavailable') {
   return { code, severity: 'warning' as const, surface, message: code, coverage };
+}
+
+function defaultedBindingChildWarning(child: 'sources' | 'supportedAttributes') {
+  const surface = `bindings.${child}`;
+  return {
+    code: `${surface}.invalid_evidence`,
+    severity: 'warning' as const,
+    surface,
+    message: `The manifest contains incomplete ${surface} evidence; defaults were not treated as a successful empty read.`,
+    coverage: 'partial' as const,
+  };
 }
 
 function rawFixture(): any {

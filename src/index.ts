@@ -130,6 +130,9 @@ function preserveEvidence(context: SiteContext, raw: unknown): SiteContext {
   const warnings = [...context.warnings];
   const declaredWarnings = declaredWarningsFor(context);
   for (const surface of COLLECTION_SURFACES) {
+    if (surface === 'bindings' && preserveBindingChildEvidence(rawManifest, warnings, declaredWarnings)) {
+      continue;
+    }
     const status = rawSurfaceStatus(rawManifest, surface);
     if (status === 'complete' || hasIncompleteSurfaceWarning(declaredWarnings, surface)) {
       continue;
@@ -161,6 +164,41 @@ function preserveEvidence(context: SiteContext, raw: unknown): SiteContext {
       partial,
     },
   };
+}
+
+/**
+ * Sources and supported attributes are independently collected binding
+ * registries. When bindings are explicitly available, preserve a defaulted
+ * child as partial evidence without weakening the sibling registry.
+ */
+function preserveBindingChildEvidence(
+  raw: Record<string, unknown>,
+  warnings: SiteContext['warnings'],
+  declaredWarnings: SiteContext['warnings'],
+): boolean {
+  const bindings = recordOrUndefined(raw.bindings);
+  if (!bindings || bindings.available !== true) {
+    return false;
+  }
+
+  for (const [child, complete] of [
+    ['sources', bindingSourceArray(bindings.sources)],
+    ['supportedAttributes', stringArrayMap(bindings.supportedAttributes)],
+  ] as const) {
+    const surface = `bindings.${child}`;
+    if (complete || hasIncompleteSurfaceWarning(declaredWarnings, surface)) {
+      continue;
+    }
+    warnings.push({
+      code: `${surface}.invalid_evidence`,
+      severity: 'warning',
+      surface,
+      message: `The manifest contains incomplete ${surface} evidence; defaults were not treated as a successful empty read.`,
+      coverage: 'partial',
+    });
+  }
+
+  return true;
 }
 
 const COLLECTION_SURFACES: readonly CollectionSurface[] = [
@@ -275,7 +313,7 @@ function stringArrayMap(value: unknown): boolean {
   return Boolean(record && Object.values(record).every((item) => Array.isArray(item) && item.every((entry) => typeof entry === 'string')));
 }
 
-function hasIncompleteSurfaceWarning(warnings: readonly { surface: string; coverage?: CoverageStatus }[], surface: CollectionSurface): boolean {
+function hasIncompleteSurfaceWarning(warnings: readonly { surface: string; coverage?: CoverageStatus }[], surface: string): boolean {
   return warnings.some((warning) =>
     (warning.surface === surface || warning.surface.startsWith(`${surface}.`)) && warning.coverage !== 'complete',
   );
