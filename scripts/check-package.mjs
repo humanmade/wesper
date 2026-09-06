@@ -35,7 +35,9 @@ try {
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { lookupNativeToken, validate } from 'wesper';
+import { checkBindingReference, checkTokenReference, lookupNativeToken, validate } from 'wesper';
+if (typeof checkTokenReference !== 'function') throw new Error('Compatibility token helper was not exported.');
+if (typeof checkBindingReference !== 'function') throw new Error('Compatibility binding helper was not exported.');
 const require = createRequire(import.meta.url);
 const packageRoot = path.dirname(require.resolve('wesper/package.json'));
 const fixture = JSON.parse(await readFile(path.join(packageRoot, 'examples/fixtures/consumer-manifest.json'), 'utf8'));

@@ -85,6 +85,12 @@ Native theme tokens include stable `id`, kind, slug, value, origin, and `referen
 
 `focusContext` creates a deterministic narrowed view for explicitly selected post types, blocks, and token kinds. Omitted or empty selectors select nothing. Its `sourceManifestHash` identifies the parent manifest only; it is not a hash of the projection.
 
+### Compatibility checks
+
+`checkTokenReference` checks an explicit native-token `kind` and `slug`; `checkBindingReference` checks an explicit block, attribute, source, and field selector. Each returns `compatible`, `incompatible`, or `unknown`, with deterministic reasons, stable manifest identifiers, relevant warnings and coverage, plus the manifest `sourceManifestHash` behind the conclusion. Missing or partial evidence is conservatively `unknown`; only complete evidence can establish an absence.
+
+Binding prerequisites are checked independently: the block, supported attribute, source, and exact source-qualified field must each be supported. Compatible field and source `args` are returned verbatim, never inferred or rewritten. These checks concern manifest compatibility only—not runtime rendering, permissions, post context, or semantic/design choices. They do not diagnose literals or propose replacements; a consumer that adds an opt-in literal suggestion must present its supporting evidence rather than treating every literal as wrong.
+
 ### Binding join
 
 Before writing `metadata.bindings`, consumers join `bindings.supportedAttributes` (the bindable attributes reported for each block type) with `contentModel.postTypes[].fields` (the fields reported for the target post type). Each field carries ready-to-use `args`; copy them verbatim. In particular, do not invent `field` for `core/post-data` or `key` for `core/post-meta`—Wesper owns that source-specific syntax.
@@ -110,7 +116,7 @@ Non-strict collection can successfully write a partial manifest; inspect `proven
 
 ## Portable consumer example
 
-The package ships an executable [consumer helper example](examples/consumer-helpers.mjs) and its [synthetic fixture](examples/fixtures/consumer-manifest.json). The fixture is manifest provenance (`collector: "fixture"`), not an executable collection transport. Its placeholder `sourceHash` is not an integrity assertion; load it with `validate`, never `collect`.
+The package ships an executable [consumer helper example](examples/consumer-helpers.mjs) and its [synthetic fixture](examples/fixtures/consumer-manifest.json). It performs read-only native-reference lookups and compatibility checks, including their evidence, without changing WordPress content or inferring bindings. The fixture is manifest provenance (`collector: "fixture"`), not an executable collection transport. Its placeholder `sourceHash` is not an integrity assertion; load it with `validate`, never `collect`.
 
 From a checkout:
 
