@@ -35,7 +35,8 @@ const npmEnv = { ...process.env, npm_config_cache: npmCache };
 const startedAt = new Date().toISOString();
 const manifestPath = path.join(root, 'examples', 'fixtures', 'consumer-manifest.json');
 const fixturePath = path.join(example, 'fixture.html');
-const [manifestSource, fixtureSource] = await Promise.all([readFile(manifestPath), readFile(fixturePath)]);
+const metricsFixturePath = path.join(example, 'fixture.json');
+const [manifestSource, fixtureSource, metricsFixtureSource] = await Promise.all([readFile(manifestPath), readFile(fixturePath), readFile(metricsFixturePath)]);
 const wesperPack = await packWesper(artifacts, npmEnv);
 const wesperTarball = path.join(artifacts, wesperPack.filename);
 
@@ -49,12 +50,26 @@ if (install.exitCode !== 0) {
 const installed = await installedPackages(consumer);
 const fullContext = path.join(consumer, 'full-context.json');
 await writeFile(fullContext, manifestSource);
+const metricsFixture = path.join(consumer, 'fixture.json');
+await writeFile(metricsFixture, metricsFixtureSource);
 const focusedContext = path.join(consumer, 'focused-context.json');
 const derive = await deriveFocused(consumer, fullContext, focusedContext);
 await writeJson(path.join(outputDirectory, 'focused-context-derivation.json'), derive);
 if (derive.exitCode !== 0) {
   await finishFailure('Installed Wesper could not derive focused context; see focused-context-derivation.json.', { consumer, startedAt, blockRunnerTarball, wesperTarball });
 }
+
+const independentScript = path.join(consumer, 'node_modules', 'wesper', 'examples', 'site-native-output', 'independent-consumer.mjs');
+const independentRaw = await run(process.execPath, [independentScript, fullContext, metricsFixture], { cwd: consumer });
+const independentRawPath = path.join(runsDirectory, 'independent-consumer.json');
+await writeJson(independentRawPath, independentRaw);
+const independent = {
+  raw: path.relative(outputDirectory, independentRawPath),
+  exitCode: independentRaw.exitCode,
+  signal: independentRaw.signal,
+  commandDurationMs: independentRaw.durationMs,
+  metrics: parseJson(independentRaw.stdout),
+};
 
 const binary = path.join(consumer, 'node_modules', '.bin', 'block-runner');
 const baseArgs = ['convert', '-', '--json', '--styling', 'relaxed', '--token-match', 'exact'];
@@ -71,7 +86,7 @@ for (const arm of arms) {
   runs.push({ arm: arm.arm, raw: path.relative(outputDirectory, rawPath), ...summarizeRun(result) });
 }
 
-const findings = deriveFindings(runs, fixturePath);
+const findings = deriveFindings(runs, independent, fixturePath);
 await writeJson(path.join(outputDirectory, 'findings.json'), findings);
 const record = {
   schema: 'wesper.site-native-output.record/v1',
@@ -79,14 +94,15 @@ const record = {
   finishedAt: new Date().toISOString(),
   consumer,
   fixture: { path: relative(root, fixturePath), sha256: digest(fixtureSource), bytes: fixtureSource.byteLength },
+  metricsFixture: { path: relative(root, metricsFixturePath), sha256: digest(metricsFixtureSource), bytes: metricsFixtureSource.byteLength },
   manifest: { path: relative(root, manifestPath), sha256: digest(manifestSource), bytes: manifestSource.byteLength },
   packages: {
     wesper: await artifactProvenance(wesperTarball, installed.wesper),
     blockRunner: await artifactProvenance(blockRunnerTarball, installed.blockRunner),
   },
   runtime: { node: process.version, npm: (await commandVersion('npm')).trim(), platform: process.platform, arch: process.arch },
-  commands: { install: 'install.json', focusedContextDerivation: 'focused-context-derivation.json', runs },
-  status: runs.every((run) => run.exitCode === 0) ? 'complete' : 'incomplete',
+  commands: { install: 'install.json', focusedContextDerivation: 'focused-context-derivation.json', independentConsumer: independent, runs },
+  status: independent.exitCode === 0 && runs.every((run) => run.exitCode === 0) ? 'complete' : 'incomplete',
 };
 await writeJson(path.join(outputDirectory, 'record.json'), record);
 console.log(`${record.status}: ${path.join(outputDirectory, 'record.json')}`);
@@ -136,11 +152,18 @@ function summarizeRun(result) {
   };
 }
 
-function deriveFindings(runs, fixture) {
+function deriveFindings(runs, independent, fixture) {
   return {
     schema: 'wesper.site-native-output.findings/v1',
     derivedFrom: runs.map(({ arm, raw }) => ({ arm, raw })),
     fixture: relative(root, fixture),
+    independentConsumer: {
+      raw: independent.raw,
+      status: independent.exitCode === 0 ? 'recorded' : 'failed',
+      exitCode: independent.exitCode,
+      commandDurationMs: independent.commandDurationMs,
+      metrics: independent.metrics,
+    },
     results: runs.map((run) => ({
       arm: run.arm,
       status: run.exitCode === 0 ? 'recorded' : 'failed',

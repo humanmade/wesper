@@ -19,6 +19,8 @@ The recorder packs this checkout of Wesper, installs that tarball and the exact 
 - full: the shipped full manifest;
 - focused: the installed Wesper `FocusedContext` projection.
 
+It also executes the installed package's `independent-consumer.mjs`. That consumer imports only Wesper's public API (`validate`, `lookupNativeToken`, and `checkTokenReference`) and records its own token-reuse, invalid-reference, unnecessary-literal, repair-attempt, intentional-literal, duration, and unavailable-cost metrics against the same approved fixture.
+
 Every result directory contains `record.json`, raw stdout/stderr and command metadata under `runs/`, plus `findings.json`. Provenance includes SHA-256 and byte size for both tarballs, installed package metadata, Node/npm versions, source hashes, exact argv, timings, and derived repair evidence. `findings.json` is derived from those raw files; it never supplies output, timing, or repair claims itself.
 
 The focused arm intentionally fails as a recorded blocker if the packaged Block Runner CLI cannot consume `kind: "wesper.focused-context"`. That is a consumer capability gap, not a reason to silently substitute the full manifest or invent a focused result.

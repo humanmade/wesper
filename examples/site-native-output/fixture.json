@@ -1,0 +1,11 @@
+{
+  "nativeTokenCandidates": [
+    { "location": "core/paragraph[0].style.color.text", "kind": "color", "slug": "primary", "literal": "#0057ff" },
+    { "location": "core/paragraph[0].style.typography.fontFamily", "kind": "font-family", "slug": "body", "literal": "Inter, sans-serif" },
+    { "location": "core/paragraph[0].style.typography.fontSize", "kind": "font-size", "slug": "large", "literal": "2rem" },
+    { "location": "core/paragraph[0].style.spacing.padding.top", "kind": "spacing", "slug": "40", "literal": "1rem" }
+  ],
+  "intentionalLiterals": [
+    { "location": "core/paragraph[0].style.typography.lineHeight", "value": "1.4", "reason": "The fixture exposes no line-height native token kind." }
+  ]
+}

@@ -21,6 +21,8 @@ try {
     'examples/consumer-helpers.mjs', 'examples/fixtures/consumer-manifest.json',
     'examples/site-native-output/README.md',
     'examples/site-native-output/fixture.html',
+    'examples/site-native-output/fixture.json',
+    'examples/site-native-output/independent-consumer.mjs',
     'examples/site-native-output/record.mjs',
   ]);
   for (const file of allowed) if (!actual.has(file)) throw new Error(`Package is missing required file: ${file}`);
