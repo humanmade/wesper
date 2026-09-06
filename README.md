@@ -40,7 +40,7 @@ Wesper supports Node.js 20 or later. Pull requests exercise the minimum supporte
 Node line (20) and the current Node LTS line (24). The package is built for Node 20.
 
 The WordPress collector supports WordPress 6.5 or later. Its conformance matrix uses
-WordPress 6.5.6, where Block Bindings were introduced, and 7.1, a later core
+WordPress 6.5.5, on the first Block Bindings release line, and 7.1.0, a later core
 API boundary. These are deliberately pinned tested boundaries so a pull request
 has reproducible evidence; update the upper boundary intentionally when
 WordPress core changes.
@@ -62,8 +62,8 @@ and native references. No production site or credentials are used.
 Docker and Node.js are required to run it locally. Select a matrix version when needed:
 
 ```sh
-WORDPRESS_VERSION=6.5.6 npm run test:integration
-WORDPRESS_VERSION=7.1 npm run test:integration
+WORDPRESS_VERSION=6.5.5 npm run test:integration
+WORDPRESS_VERSION=7.1.0 npm run test:integration
 ```
 
 Fixture setup can create its disposable database, site, and test registrations. The

@@ -16,7 +16,7 @@ services:
       retries: 30
 
   wordpress:
-    image: wordpress:${WORDPRESS_VERSION:-6.5.6}-php8.2-apache
+    image: wordpress:${WORDPRESS_VERSION:-6.5.5}-php8.2-apache
     depends_on:
       db:
         condition: service_healthy
@@ -35,6 +35,8 @@ services:
     # The CLI image contains WP-CLI only; the mounted volume supplies the
     # selected WordPress core from the web service above.
     image: wordpress:cli-php8.2
+    # Match the Apache image's www-data UID on the shared WordPress volume.
+    user: "33:33"
     depends_on:
       db:
         condition: service_healthy

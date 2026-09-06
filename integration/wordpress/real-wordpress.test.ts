@@ -5,9 +5,9 @@
  */
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
 import { collect, sourceHash, stringifyManifest, validate } from '../../src/index.js';
 import { coverageFor } from '../../src/warnings.js';
@@ -32,7 +32,9 @@ try {
   await cli('validate', manifest);
   await cli('summarize', manifest, '--format', 'json');
 } finally {
-  await rm(saved, { recursive: true, force: true });
+  const trash = join(homedir(), '.Trash');
+  await mkdir(trash, { recursive: true });
+  await execFile('mv', [saved, join(trash, basename(saved))]);
 }
 
 assert.equal(first.theme?.settingsOrigin, 'merged');
@@ -45,10 +47,13 @@ assert.deepEqual(shared && {
 assert.ok(tokens.some((token) => token.slug === 'wesper-theme-only'));
 assert.ok(tokens.some((token) => token.slug === 'wesper-user-only'));
 const sharedFontSize = first.theme?.tokens?.fontSizes.find((token) => token.slug === 'wesper-shared');
+const presetCss = await wpJson('echo wp_json_encode(wp_get_global_stylesheet(array("variables")));');
+const effectiveFontSize = presetCss.match(/--wp--preset--font-size--wesper-shared:\s*([^;]+);/)?.[1].trim();
+assert.ok(effectiveFontSize, 'WordPress emits the fixture font-size custom property');
 assert.deepEqual(sharedFontSize && {
   id: sharedFontSize.id, value: sharedFontSize.value, origin: sharedFontSize.origin,
   css: sharedFontSize.references.cssCustomProperty, style: sharedFontSize.references.blockStyle,
-}, { id: 'font-size:wesper-shared', value: '20px', origin: 'user', css: '--wp--preset--font-size--wesper-shared', style: 'var:preset|font-size|wesper-shared' });
+}, { id: 'font-size:wesper-shared', value: effectiveFontSize, origin: 'user', css: '--wp--preset--font-size--wesper-shared', style: 'var:preset|font-size|wesper-shared' });
 assert.notEqual(shared?.id, sharedFontSize?.id, 'identical slugs remain distinct across token kinds');
 
 const post = first.contentModel?.postTypes.find((type) => type.name === 'post');
