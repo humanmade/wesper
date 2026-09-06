@@ -1,0 +1,77 @@
+name: Pull request checks
+
+"on":
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package checks (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 24]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify generated schema is committed
+        run: git diff --exit-code HEAD -- schemas/site-context-v1.schema.json
+
+      - name: Check package
+        run: npm run check:package
+
+  integration:
+    name: WordPress integration (WP ${{ matrix.wordpress }}, Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Block Bindings arrived in 6.5; 7.1 exercises a later core API boundary.
+          - node: 20
+            wordpress: 6.5.6
+          - node: 24
+            wordpress: 7.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run disposable WordPress conformance suite
+        run: npm run test:integration
+        env:
+          WORDPRESS_VERSION: ${{ matrix.wordpress }}

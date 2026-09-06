@@ -1,0 +1,52 @@
+# A deliberately small, throw-away WordPress installation for the collector
+# contract tests. The named volumes belong to the Compose project created by
+# run-real-wordpress.sh and are removed by that script.
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_ROOT_PASSWORD: wordpress
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  wordpress:
+    image: wordpress:${WORDPRESS_VERSION:-6.5.6}-php8.2-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WESPER_WORDPRESS_PORT:-18080}:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+    volumes:
+      - wordpress:/var/www/html
+      - ./fixtures/wesper-contract.php:/fixtures/wesper-contract.php:ro
+
+  wpcli:
+    # The CLI image contains WP-CLI only; the mounted volume supplies the
+    # selected WordPress core from the web service above.
+    image: wordpress:cli-php8.2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+    volumes:
+      - wordpress:/var/www/html
+      - ./fixtures/wesper-contract.php:/fixtures/wesper-contract.php:ro
+    entrypoint: ["sleep", "infinity"]
+
+volumes:
+  wordpress:
