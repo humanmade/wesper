@@ -5,6 +5,11 @@ import { parseThemeJsonSettings, themeWarnings } from '../theme.js';
 import { coverageFor } from '../warnings.js';
 import { CONTEXT_VERSION, SCHEMA_URL, type ContextWarning, type SiteContext } from '../types.js';
 
+/**
+ * Revision of the shared WP-CLI/REST collection semantics. This is deliberately
+ * independent of the package and manifest compatibility versions; bump it only
+ * when the collector's observed/normalized output semantics change.
+ */
 export const COLLECTOR_VERSION = '0.1.0';
 
 export function normalizeCollectorOutput(

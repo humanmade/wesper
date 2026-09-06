@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
 import { sanitizeErrorMessage } from './collector/safe.js';
 import { UsageError } from './types.js';
+import { PACKAGE_VERSION } from './version.js';
 import { allWarnings, hasActionableWarnings } from './warnings.js';
 
 const EXIT = {
@@ -17,8 +18,8 @@ const program = new Command();
 
 program
   .name('wesper')
-  .description('Read a WordPress site into a portable context manifest for agents and Block Runner passes.')
-  .version('0.0.2');
+  .description('Read a WordPress site into a portable context manifest.')
+  .version(PACKAGE_VERSION);
 
 program
   .command('collect')
@@ -135,14 +136,6 @@ program
       console.error(`wesper summarize: ${message(error)}`);
       process.exitCode = EXIT.usageOrInput;
     }
-  });
-
-program
-  .command('diff <old> <new>')
-  .description('Diff two manifests (deferred to V1.1)')
-  .action(() => {
-    console.error('wesper diff is deferred to V1.1.');
-    process.exitCode = EXIT.usageOrInput;
   });
 
 // Commander renders its own diagnostics. Prevent it from exiting directly so

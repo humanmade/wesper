@@ -10,6 +10,7 @@ CLAUDE.md
 # Node
 node_modules/
 dist/
+.trash/
 build/
 *.tsbuildinfo
 .env

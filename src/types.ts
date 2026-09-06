@@ -97,7 +97,7 @@ export interface ValidationResult {
 }
 
 export interface CollectOptions {
-  collector?: CollectorKind;
+  collector?: Exclude<CollectorKind, 'fixture'>;
   wpPath?: string;
   wpUrl?: string;
   wpUser?: string;
