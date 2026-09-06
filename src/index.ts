@@ -11,6 +11,20 @@ export {
 export { orderManifestForJson, stringifyManifest } from './serialize.js';
 export { parseThemeJsonSettings, type ThemeToken, type ThemeTokenKind, type ThemeTokenOrigin } from './theme.js';
 export { summarize, formatSummaryMarkdown } from './summary.js';
+export {
+  focusContext,
+  lookupBlock,
+  lookupField,
+  lookupNativeToken,
+  nativeTokenCoverage,
+  type FieldReference,
+  type FocusedContext,
+  type FocusOptions,
+  type LookupResult,
+  type LookupStatus,
+  type NativeTokenReference,
+  type RegistryCoverage,
+} from './consumer.js';
 
 import { ZodError } from 'zod/v4';
 import { collectRest } from './collector/rest.js';
