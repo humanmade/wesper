@@ -159,6 +159,23 @@ describe('consumer helpers', () => {
     expect(JSON.stringify(context)).toBe(before);
   });
 
+  it('retains only relevant warnings in a token-only view', () => {
+    const raw = rawFixture();
+    raw.warnings = [
+      warning('settings.partial', 'theme.settings', 'partial'),
+      warning('palette.partial', 'theme.settings.color.palette', 'partial'),
+      warning('theme.partial', 'theme', 'partial'),
+      warning('tokens.partial', 'theme.tokens', 'partial'),
+      warning('color.partial', 'theme.tokens.presets.color', 'partial'),
+      warning('fonts.partial', 'theme.tokens.presets.font-size', 'partial'),
+    ];
+
+    expect(focusContext(parse(raw), { tokenKinds: ['color'] }).warnings.map((item) => item.code)).toEqual([
+      'theme.partial', 'tokens.partial', 'color.partial',
+    ]);
+    expect(focusContext(parse(raw)).warnings).toEqual([]);
+  });
+
   it('reports native-token coverage consistently through summaries and focused views', () => {
     const context = validContext();
     expect(summarize(context).coverage.nativeTokens).toBe(lookupNativeToken(context, { kind: 'color', slug: 'missing' }).coverage);

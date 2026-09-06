@@ -209,7 +209,7 @@ function warningAppliesToSelection(warning: ContextWarning, selection: FocusedCo
   if (warning.surface === 'blocks' || warning.surface.startsWith('blocks.')) {
     return selection.blocks.length > 0 && scopedWarningMatches(warning.surface, 'blocks.types', selection.blocks);
   }
-  if (warning.surface === 'theme' || warning.surface.startsWith('theme.')) {
+  if (isNativeTokenWarning(warning)) {
     return selection.tokenKinds.length > 0 && scopedWarningMatches(warning.surface, 'theme.tokens.presets', selection.tokenKinds);
   }
   return false;
