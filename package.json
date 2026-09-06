@@ -1,6 +1,6 @@
 {
   "name": "wesper",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Read a WordPress site's block registry, theme tokens, bindings, fields, patterns, and media into a provenanced agent context manifest.",
   "type": "module",
   "license": "GPL-2.0-or-later",
