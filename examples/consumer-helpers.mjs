@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { focusContext, lookupBlock, lookupField, lookupNativeToken, validate } from '../src/index.js';
+import { focusContext, lookupBlock, lookupField, lookupNativeToken, validate } from 'wesper';
 
 const manifest = JSON.parse(readFileSync(new URL('./fixtures/consumer-manifest.json', import.meta.url), 'utf8'));
 const checked = validate(manifest);
@@ -26,11 +26,9 @@ assertEqual(tokens.map((result) => result.value.references), [
 assertEqual(price.value.args, { key: 'price', default: 0, options: { currency: 'USD', precision: 2 } }, 'field args');
 
 console.log(JSON.stringify(focusContext(context, {
-  postTypes: ['product'],
-  blocks: ['core/paragraph'],
-  tokenKinds: ['color', 'font-family', 'font-size', 'spacing'],
+  postTypes: ['product'], blocks: ['core/paragraph'], tokenKinds: ['color', 'font-family', 'font-size', 'spacing'],
 }), null, 2));
 
-function assertEqual(actual: unknown, expected: unknown, label: string): void {
+function assertEqual(actual, expected, label) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Unexpected ${label}.`);
 }

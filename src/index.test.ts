@@ -6,9 +6,21 @@ import { MAX_REDACTION_DEPTH, redactSecrets } from './redact.js';
 import { siteContextJsonSchema } from './schema.js';
 import { parseThemeJsonSettings } from './theme.js';
 import { SCHEMA_URL, type SiteContext } from './types.js';
-import { formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
+import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate, type CollectOptions } from './index.js';
+
+// @ts-expect-error fixture identifies supplied manifest provenance, not a collector.
+const fixtureCollector: CollectOptions = { collector: 'fixture' };
 
 describe('validation', () => {
+  it('rejects fixture collection from untyped JavaScript callers while validating fixture provenance', async () => {
+    await expect(collect({ collector: 'fixture' as never })).rejects.toMatchObject({
+      code: 'WESPER_USAGE',
+      message: 'Unsupported collector: fixture',
+    });
+    expect(validate(fixture()).ok).toBe(true);
+    expect(fixtureCollector).toEqual({ collector: 'fixture' });
+  });
+
   it('accepts the canonical V1 shape and preserves unknown top-level keys', () => {
     const manifest = fixture({ abilities: { future: true } });
     const result = validate(manifest);
@@ -892,7 +904,7 @@ describe('manifest serialization', () => {
 });
 
 describe('package metadata', () => {
-  it('does not advertise deferred V1.1 surfaces as shipped V1 features', () => {
+  it('labels deferred surfaces as outside the current delivery scope', () => {
     const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
       description: string;
       keywords: string[];
@@ -900,9 +912,7 @@ describe('package metadata', () => {
     const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
     const publicMetadata = `${packageJson.description} ${packageJson.keywords.join(' ')} ${readme}`;
 
-    // REST shipped in this build (it is now a supported collector), so it is no longer
-    // a deferred surface. The rest remain V1.1-deferred and must not be advertised as V1.
-    expect(publicMetadata).not.toMatch(/\b(?:abilities|mcp|acf|diff|freshness|ttl)\b/i);
+    expect(publicMetadata).toMatch(/MCP, Abilities, ACF, diff\/freshness, and WordPress mutations are outside the current delivery scope/i);
   });
 });
 

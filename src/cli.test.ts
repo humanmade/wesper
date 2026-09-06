@@ -6,6 +6,24 @@ import { describe, expect, it } from 'vitest';
 import { SCHEMA_URL } from './types.js';
 
 describe('CLI', () => {
+  it('lists current commands, rejects diff, and reports the package version', async () => {
+    const help = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', '--help'], { cwd: process.cwd(), encoding: 'utf8' });
+    expect(help.status).toBe(0);
+    expect(help.stdout).toContain('collect');
+    expect(help.stdout).toContain('validate');
+    expect(help.stdout).toContain('summarize');
+    expect(help.stdout).not.toContain('diff');
+
+    const diff = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'diff'], { cwd: process.cwd(), encoding: 'utf8' });
+    expect(diff.status).toBe(2);
+    expect(diff.stderr).toContain('unknown command');
+
+    const packageVersion = (JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+    const version = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', '--version'], { cwd: process.cwd(), encoding: 'utf8' });
+    expect(version.status).toBe(0);
+    expect(version.stdout.trim()).toBe(packageVersion);
+  });
+
   it('rejects unsupported formats', async () => {
     const manifestPath = await writeFixture();
     const result = spawnSync(
