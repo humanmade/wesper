@@ -1,4 +1,5 @@
 import { canonicalize, sourceHash } from '../canonical.js';
+import { hasOwn, recordArray, recordOrUndefined, recordWithRecordArray, stringArrayMap } from '../evidence.js';
 import { redactSecrets } from '../redact.js';
 import { siteContextSchema } from '../schema.js';
 import { parseThemeJsonSettings, themeWarnings } from '../theme.js';
@@ -76,7 +77,7 @@ export function normalizeCollectorOutput(
   if (validPlugins) {
     collected.plugins = sortPlugins(plugins);
   }
-  const blocks = recordWithRecordArray(redactedRaw, 'blocks', 'types');
+  const blocks = recordWithRecordArray(redactedRaw.blocks, 'types');
   warnIfMalformed(warnings, redactedRaw, 'blocks', Boolean(blocks));
   if (blocks) {
     collected.blocks = {
@@ -97,7 +98,7 @@ export function normalizeCollectorOutput(
       warnings: sortWarnings(warningArray(bindingsRaw.warnings)),
     };
   }
-  const contentModel = recordWithRecordArray(redactedRaw, 'contentModel', 'postTypes');
+  const contentModel = recordWithRecordArray(redactedRaw.contentModel, 'postTypes');
   const completeContentModel = contentModel && hasCompletePostTypes(contentModel.postTypes) ? contentModel : undefined;
   warnIfMalformed(warnings, redactedRaw, 'contentModel', Boolean(completeContentModel));
   if (completeContentModel) {
@@ -105,14 +106,14 @@ export function normalizeCollectorOutput(
       postTypes: sortPostTypes(array(completeContentModel.postTypes)),
     };
   }
-  const patterns = recordWithRecordArray(redactedRaw, 'patterns', 'items');
+  const patterns = recordWithRecordArray(redactedRaw.patterns, 'items');
   warnIfMalformed(warnings, redactedRaw, 'patterns', Boolean(patterns));
   if (patterns) {
     collected.patterns = {
       items: sortPatterns(array(patterns.items)),
     };
   }
-  const media = recordWithRecordArray(redactedRaw, 'media', 'imageSizes');
+  const media = recordWithRecordArray(redactedRaw.media, 'imageSizes');
   warnIfMalformed(warnings, redactedRaw, 'media', Boolean(media));
   if (media) {
     collected.media = {
@@ -171,10 +172,6 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function recordOrUndefined(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
-
 /**
  * A missing collection key is unknown, rather than an empty result. Collectors
  * express a successful empty read with an explicit key such as `{ types: [] }`.
@@ -192,15 +189,6 @@ function themeSection(raw: Record<string, unknown>): Record<string, unknown> | u
   const value = recordOrUndefined(raw.theme);
   const evidenceKeys = ['settings', 'stylesheet', 'template', 'name', 'version', 'isBlockTheme'];
   return value && evidenceKeys.some((key) => hasOwn(value, key)) ? value : undefined;
-}
-
-function recordWithRecordArray(
-  raw: Record<string, unknown>,
-  section: string,
-  arrayKey: string,
-): Record<string, unknown> | undefined {
-  const value = recordOrUndefined(raw[section]);
-  return value && recordArray(value[arrayKey]) ? value : undefined;
 }
 
 function bindingSection(raw: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -228,10 +216,6 @@ function hasCompletePostTypes(value: unknown): boolean {
     const record = recordOrUndefined(postType);
     return record && recordArray(record.fields);
   });
-}
-
-function recordArray(value: unknown): value is Array<Record<string, unknown>> {
-  return Array.isArray(value) && value.every((item) => recordOrUndefined(item) !== undefined);
 }
 
 /**
@@ -263,13 +247,6 @@ function isJsonValue(value: unknown): boolean {
   }
   const object = recordOrUndefined(value);
   return object !== undefined && Object.values(object).every(isJsonValue);
-}
-
-function stringArrayMap(value: unknown): value is Record<string, string[]> {
-  const record = recordOrUndefined(value);
-  return record !== undefined && Object.values(record).every(
-    (entry) => Array.isArray(entry) && entry.every((item) => typeof item === 'string'),
-  );
 }
 
 function warnIfMalformed(
@@ -318,10 +295,6 @@ const COLLECTION_SURFACES = [
 
 function hasSurfaceWarning(warnings: ContextWarning[], surface: string): boolean {
   return warnings.some((warning) => warning.surface === surface || warning.surface.startsWith(`${surface}.`));
-}
-
-function hasOwn(value: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function array(value: unknown): Array<Record<string, unknown>> {

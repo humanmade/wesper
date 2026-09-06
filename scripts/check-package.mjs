@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -9,16 +9,22 @@ const execFileAsync = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 const scratch = await mkdtemp(path.join(tmpdir(), 'wesper-package-'));
 const npmEnv = { ...process.env, npm_config_cache: path.join(scratch, 'npm-cache') };
+// Preserve npmrc policy without turning npm run's exported setting into a
+// forbidden npm 12 project-install flag. Installation scripts remain disabled.
+delete npmEnv.npm_config_allow_scripts;
+delete npmEnv.NPM_CONFIG_ALLOW_SCRIPTS;
 
 try {
-  const packed = JSON.parse((await execFileAsync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: root, env: npmEnv })).stdout);
+  const packOutput = JSON.parse((await execFileAsync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: root, env: npmEnv })).stdout);
+  const packed = Array.isArray(packOutput) ? packOutput : Object.values(packOutput);
+  if (packed.length !== 1 || packed[0]?.name !== 'wesper') throw new Error('npm pack did not return exactly one Wesper package.');
   const artifact = path.join(scratch, packed[0].filename);
   const actual = new Set(packed[0].files.map((file) => file.path));
   const allowed = new Set([
     'LICENSE', 'README.md', 'package.json',
     'dist/cli.js', 'dist/index.js', 'dist/cli.d.ts', 'dist/index.d.ts',
     'schemas/site-context-v1.schema.json',
-    'examples/consumer-helpers.mjs', 'examples/fixtures/consumer-manifest.json',
+    'examples/consumer-helpers.mjs', 'examples/consumer-proof.mjs', 'examples/fixtures/consumer-manifest.json',
   ]);
   for (const file of allowed) if (!actual.has(file)) throw new Error(`Package is missing required file: ${file}`);
   for (const file of actual) if (!allowed.has(file)) throw new Error(`Package contains disallowed file: ${file}`);
@@ -62,6 +68,17 @@ JSON.parse(await readFile(path.join(packageRoot, 'schemas/site-context-v1.schema
   await execFileAsync(bin, ['validate', fixturePath], { cwd: scratch });
   await execFileAsync(bin, ['summarize', fixturePath], { cwd: scratch });
   await execFileAsync(process.execPath, [path.join(packageRoot, 'examples/consumer-helpers.mjs')], { cwd: scratch });
+  const proof = JSON.parse((await execFileAsync(process.execPath, [path.join(packageRoot, 'examples/consumer-proof.mjs'), fixturePath], { cwd: scratch })).stdout);
+  if (proof.consumer.knownBinding.status !== 'compatible' || proof.consumer.missingRegistryToken.status !== 'unknown') {
+    throw new Error('Installed independent consumer did not preserve compatibility evidence.');
+  }
 } finally {
-  await rm(scratch, { recursive: true, force: true });
+  try {
+    await execFileAsync('trash', [scratch]);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    const trash = path.join(homedir(), '.Trash');
+    await mkdir(trash, { recursive: true });
+    await rename(scratch, path.join(trash, path.basename(scratch)));
+  }
 }

@@ -46,6 +46,19 @@ jobs:
       - name: Check package
         run: npm run check:package
 
+      - name: Prove native consumer output
+        if: matrix.node == 24
+        run: npm run example:consumer-proof
+
+      - name: Retain consumer proof
+        if: always() && matrix.node == 24
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-proof
+          path: build/consumer-proof/
+          if-no-files-found: ignore
+          retention-days: 14
+
   integration:
     name: WordPress integration (WP ${{ matrix.wordpress }}, Node ${{ matrix.node }})
     runs-on: ubuntu-latest
