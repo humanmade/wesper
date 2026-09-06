@@ -19,6 +19,9 @@ try {
     'dist/cli.js', 'dist/index.js', 'dist/cli.d.ts', 'dist/index.d.ts',
     'schemas/site-context-v1.schema.json',
     'examples/consumer-helpers.mjs', 'examples/fixtures/consumer-manifest.json',
+    'examples/site-native-output/README.md',
+    'examples/site-native-output/fixture.html',
+    'examples/site-native-output/record.mjs',
   ]);
   for (const file of allowed) if (!actual.has(file)) throw new Error(`Package is missing required file: ${file}`);
   for (const file of actual) if (!allowed.has(file)) throw new Error(`Package contains disallowed file: ${file}`);

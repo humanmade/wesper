@@ -41,6 +41,7 @@
     "schemas",
     "examples/consumer-helpers.mjs",
     "examples/fixtures/consumer-manifest.json",
+    "examples/site-native-output",
     "README.md",
     "LICENSE",
     "package.json"
@@ -54,6 +55,7 @@
     "clean": "node scripts/clean-dist.mjs",
     "dev": "tsx src/cli.ts",
     "example:consumer-helpers": "npm run build && node examples/consumer-helpers.mjs",
+    "record:site-native-output": "node examples/site-native-output/record.mjs",
     "generate:schema": "node --import tsx scripts/write-schema.mjs",
     "prepack": "npm run build",
     "test": "vitest run",

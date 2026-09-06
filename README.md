@@ -138,6 +138,10 @@ The package version in `package.json` drives `wesper --version`. `COLLECTOR_VERS
 
 MCP, Abilities, ACF, diff/freshness, and WordPress mutations are outside the current delivery scope.
 
+## Packaged consumer recorder
+
+The [site-native-output recorder](examples/site-native-output/README.md) runs a supplied Block Runner package in a fresh consumer and records the raw baseline, full-manifest, and focused-context CLI results. It commits no benchmark results or performance claims.
+
 ## License
 
 GPL-2.0-or-later.

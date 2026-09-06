@@ -14,3 +14,7 @@ Version sources are deliberately separate:
 - `contextVersion` is the manifest compatibility version. Version `1` identifies the V1 document contract.
 
 `npm run clean` archives `dist/` under ignored `.trash/` rather than deleting it. Restore a build by moving the archived directory back to `dist/`.
+
+## Packaged consumer recording
+
+`examples/site-native-output/` contains an approved synthetic input and a recorder, not checked-in benchmark results. Run it only with an explicit Block Runner `.tgz` and a new output directory; the recorder installs both packages into a fresh temporary consumer and writes the resulting raw CLI evidence there.
