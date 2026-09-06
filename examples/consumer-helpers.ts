@@ -1,22 +1,36 @@
-import { focusContext, lookupField, lookupNativeToken, validate } from '../src/index.js';
+import { readFileSync } from 'node:fs';
+import { focusContext, lookupBlock, lookupField, lookupNativeToken, validate } from '../src/index.js';
 
-const manifest = {
-  contextVersion: 1,
-  site: {},
-  provenance: { collectedAt: '2026-09-06T00:00:00.000Z', collector: 'fixture', collectorVersion: 'example', sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000' },
-  theme: { settings: {}, tokens: { presets: [token('color', 'primary', '#0057ff'), token('font-family', 'body', 'Inter, sans-serif'), token('font-size', 'large', '2rem'), token('spacing', '40', '1rem')] } },
-  bindings: { available: true, sources: [{ name: 'core/post-meta', usesContext: [], argsSchema: null }], supportedAttributes: {} },
-  contentModel: { postTypes: [{ name: 'product', fields: [{ name: 'price', key: 'price', source: 'core/post-meta', args: { key: 'price' }, bindable: true }] }] },
-  warnings: [],
-};
+const manifest = JSON.parse(readFileSync(new URL('./fixtures/consumer-manifest.json', import.meta.url), 'utf8'));
 const checked = validate(manifest);
 if (!checked.ok || !checked.context) throw new Error('Portable fixture did not validate.');
-const primary = lookupNativeToken(checked.context, { kind: 'color', slug: 'primary' });
-const price = lookupField(checked.context, { postType: 'product', key: 'price', source: 'core/post-meta' });
-if (primary.status !== 'found' || price.status !== 'found') throw new Error('Expected collected references were not found.');
-console.log(primary.value.references.blockStyle, price.value.args, focusContext(checked.context, { tokenKinds: ['color', 'font-family', 'font-size', 'spacing'], postTypes: ['product'] }).derived);
+const context = checked.context;
+const tokens = [
+  lookupNativeToken(context, { kind: 'color', slug: 'primary' }),
+  lookupNativeToken(context, { kind: 'font-family', slug: 'body' }),
+  lookupNativeToken(context, { kind: 'font-size', slug: 'large' }),
+  lookupNativeToken(context, { kind: 'spacing', slug: '40' }),
+];
+const price = lookupField(context, { postType: 'product', key: 'price', source: 'core/post-meta' });
+const paragraph = lookupBlock(context, 'core/paragraph');
+if (tokens.some((result) => result.status !== 'found') || price.status !== 'found' || paragraph.status !== 'found') {
+  throw new Error('Expected collected references were not found.');
+}
 
-function token(kind: 'color' | 'font-family' | 'font-size' | 'spacing', slug: string, value: string) {
-  const property = `--wp--preset--${kind}--${slug}`;
-  return { id: `${kind}:${slug}`, kind, slug, value, valueSource: 'declared' as const, origin: 'theme' as const, references: { cssCustomProperty: property, cssValue: `var(${property})`, blockStyle: `var:preset|${kind}|${slug}` } };
+assertEqual(tokens.map((result) => result.value.references), [
+  { cssCustomProperty: '--wp--preset--color--primary', cssValue: 'var(--wp--preset--color--primary)', blockStyle: 'var:preset|color|primary' },
+  { cssCustomProperty: '--wp--preset--font-family--body', cssValue: 'var(--wp--preset--font-family--body)', blockStyle: 'var:preset|font-family|body' },
+  { cssCustomProperty: '--wp--preset--font-size--large', cssValue: 'var(--wp--preset--font-size--large)', blockStyle: 'var:preset|font-size|large' },
+  { cssCustomProperty: '--wp--preset--spacing--40', cssValue: 'var(--wp--preset--spacing--40)', blockStyle: 'var:preset|spacing|40' },
+], 'native references');
+assertEqual(price.value.args, { key: 'price', default: 0, options: { currency: 'USD', precision: 2 } }, 'field args');
+
+console.log(JSON.stringify(focusContext(context, {
+  postTypes: ['product'],
+  blocks: ['core/paragraph'],
+  tokenKinds: ['color', 'font-family', 'font-size', 'spacing'],
+}), null, 2));
+
+function assertEqual(actual: unknown, expected: unknown, label: string): void {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`Unexpected ${label}.`);
 }

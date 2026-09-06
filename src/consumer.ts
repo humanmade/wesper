@@ -5,10 +5,20 @@ import { coverageFor, declaredWarningsFor, type CoverageStatus } from './warning
 /** Whether a lookup was established by the manifest, disproved by complete evidence, or remains uncollected. */
 export type LookupStatus = 'found' | 'absent' | 'unknown';
 
-export interface LookupResult<T> {
-  status: LookupStatus;
-  /** Present only when the manifest contains the requested record. */
-  value?: T;
+export type LookupResult<T> = FoundLookupResult<T> | UnresolvedLookupResult;
+
+export interface FoundLookupResult<T> {
+  status: 'found';
+  /** The exact record reported by the manifest. */
+  value: T;
+  /** Evidence coverage for the registry queried by this lookup. */
+  coverage: CoverageStatus;
+  warnings: ContextWarning[];
+  sourceManifestHash: string;
+}
+
+export interface UnresolvedLookupResult {
+  status: 'absent' | 'unknown';
   /** Evidence coverage for the registry queried by this lookup. */
   coverage: CoverageStatus;
   warnings: ContextWarning[];
@@ -17,6 +27,8 @@ export interface LookupResult<T> {
 
 /** Coverage and warnings for a registry queried by a consumer helper. */
 export interface RegistryCoverage {
+  /** Manifest surface whose collection establishes this registry's coverage. */
+  surface: 'blocks' | 'contentModel' | 'theme.tokens';
   coverage: CoverageStatus;
   warnings: ContextWarning[];
 }
@@ -26,13 +38,15 @@ export interface NativeTokenReference {
   slug: string;
 }
 
-export interface FieldReference {
+export type FieldReference = {
   postType: string;
-  /** Match a field's stable key when it is reported, otherwise its name. */
-  key?: string;
-  name?: string;
   source?: string;
-}
+} & (
+  /** Match a field's stable key when it is reported. */
+  { key: string; name?: string }
+  /** Match a field by its reported name when no stable key is available. */
+  | { key?: never; name: string }
+);
 
 export interface FocusOptions {
   postTypes?: readonly string[];
@@ -80,14 +94,16 @@ export function lookupBlock(context: SiteContext, name: string): LookupResult<Bl
 
 /** Look up a reported field, retaining its collector-provided binding arguments verbatim. */
 export function lookupField(context: SiteContext, reference: FieldReference): LookupResult<BindingField> {
+  if (reference.key === undefined && reference.name === undefined) {
+    throw new TypeError('A field lookup requires a key or name.');
+  }
   const evidence = surfaceEvidence(context, 'contentModel');
   const fields = context.contentModel?.postTypes.find((postType) => postType.name === reference.postType)?.fields ?? [];
-  const hasSelector = reference.key !== undefined || reference.name !== undefined || reference.source !== undefined;
-  const value = hasSelector ? fields.find((field) =>
-    (reference.key === undefined || (field.key ?? field.name) === reference.key) &&
+  const value = fields.find((field) =>
+    (reference.key === undefined || field.key === reference.key) &&
     (reference.name === undefined || field.name === reference.name) &&
     (reference.source === undefined || field.source === reference.source),
-  ) : undefined;
+  );
   return lookupResult(context, evidence, value);
 }
 
@@ -133,19 +149,16 @@ export function focusContext(context: SiteContext, options: FocusOptions = {}): 
 }
 
 function lookupResult<T>(context: SiteContext, evidence: RegistryCoverage, value: T | undefined): LookupResult<T> {
-  return {
-    status: value !== undefined ? 'found' : evidence.coverage === 'complete' ? 'absent' : 'unknown',
-    ...(value === undefined ? {} : { value }),
-    coverage: evidence.coverage,
-    warnings: evidence.warnings,
-    sourceManifestHash: context.provenance.sourceHash,
-  };
+  if (value !== undefined) {
+    return { status: 'found', value, coverage: evidence.coverage, warnings: evidence.warnings, sourceManifestHash: context.provenance.sourceHash };
+  }
+  return { status: evidence.coverage === 'complete' ? 'absent' : 'unknown', coverage: evidence.coverage, warnings: evidence.warnings, sourceManifestHash: context.provenance.sourceHash };
 }
 
 function surfaceEvidence(context: SiteContext, surface: 'blocks' | 'contentModel'): RegistryCoverage {
   const result = coverageFor(context, [surface])[0];
   if (!result) throw new Error(`Coverage was not returned for ${surface}.`);
-  return { coverage: result.status, warnings: result.warnings };
+  return { surface, coverage: result.status, warnings: result.warnings };
 }
 
 /**
@@ -155,16 +168,20 @@ function surfaceEvidence(context: SiteContext, surface: 'blocks' | 'contentModel
  * that native references were collected.
  */
 export function nativeTokenCoverage(context: SiteContext): RegistryCoverage {
-  const warnings = declaredWarningsFor(context).filter((warning) =>
-    warning.surface === 'theme' || warning.surface.startsWith('theme.'),
-  );
+  const warnings = declaredWarningsFor(context).filter(isNativeTokenWarning);
   const directUnavailable = warnings.some((warning) => warning.surface === 'theme.tokens' && warning.coverage === 'unavailable');
   const incomplete = warnings.some((warning) => warning.coverage === undefined || warning.coverage === 'partial' || warning.coverage === 'unavailable');
   const observed = Array.isArray(context.theme?.tokens?.presets);
   return {
+    surface: 'theme.tokens',
     coverage: directUnavailable ? 'unavailable' : incomplete ? 'partial' : observed ? 'complete' : 'unavailable',
     warnings,
   };
+}
+
+/** Theme-wide and native-registry warnings can affect token evidence; settings-only warnings cannot. */
+function isNativeTokenWarning(warning: ContextWarning): boolean {
+  return warning.surface === 'theme' || warning.surface === 'theme.tokens' || warning.surface.startsWith('theme.tokens.');
 }
 
 function nativeTokens(context: SiteContext): ThemeToken[] {
@@ -179,14 +196,30 @@ function isThemeToken(value: unknown): value is ThemeToken {
 }
 
 function relevantWarnings(context: SiteContext, selection: FocusedContext['selection']): ContextWarning[] {
-  const surfaces = new Set<string>();
-  if (selection.postTypes.length > 0) surfaces.add('contentModel');
-  if (selection.blocks.length > 0) surfaces.add('blocks');
-  if (selection.tokenKinds.length > 0) surfaces.add('theme');
   return declaredWarningsFor(context)
-    .filter((warning) => [...surfaces].some((surface) => warning.surface === surface || warning.surface.startsWith(`${surface}.`)))
+    .filter((warning) => warningAppliesToSelection(warning, selection))
     .slice()
     .sort((left, right) => compare(left.surface, right.surface) || compare(left.code, right.code) || compare(left.message, right.message));
+}
+
+function warningAppliesToSelection(warning: ContextWarning, selection: FocusedContext['selection']): boolean {
+  if (warning.surface === 'contentModel' || warning.surface.startsWith('contentModel.')) {
+    return selection.postTypes.length > 0 && scopedWarningMatches(warning.surface, 'contentModel.postTypes', selection.postTypes);
+  }
+  if (warning.surface === 'blocks' || warning.surface.startsWith('blocks.')) {
+    return selection.blocks.length > 0 && scopedWarningMatches(warning.surface, 'blocks.types', selection.blocks);
+  }
+  if (warning.surface === 'theme' || warning.surface.startsWith('theme.')) {
+    return selection.tokenKinds.length > 0 && scopedWarningMatches(warning.surface, 'theme.tokens.presets', selection.tokenKinds);
+  }
+  return false;
+}
+
+/** A warning beneath a named registry applies only when that named item was selected. */
+function scopedWarningMatches(surface: string, prefix: string, selected: readonly string[]): boolean {
+  if (!surface.startsWith(`${prefix}.`)) return true;
+  const name = surface.slice(prefix.length + 1).split('.')[0];
+  return name !== undefined && selected.includes(name);
 }
 
 function sortedUnique(values: readonly string[]): string[] { return [...new Set(values)].sort(compare); }
