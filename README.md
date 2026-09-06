@@ -130,6 +130,12 @@ From an installed package directory:
 node examples/consumer-helpers.mjs
 ```
 
+## Consumer proof
+
+Run `npm run example:consumer-proof` from a checkout to build and install the candidate in a clean consumer project, then compare fixed Block Runner inputs with no site tokens, full context and focused context. A separate Node example checks native references and field bindings through the installed Wesper API.
+
+The comparison uses synthetic fixtures and the published `block-runner@0.8.0` package. It records emitted native references, retained intentional literals, validity and context size. See [the reproducible setup and its limits](docs/consumer-proof.md). The proof runner is repository tooling; Block Runner is not a Wesper runtime dependency.
+
 ## Versions and contribution
 
 Wesper requires Node.js 20 or later, builds for Node 20, and CI checks Node 20 and 24. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and verification.
