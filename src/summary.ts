@@ -1,4 +1,5 @@
 import type { ContextWarning, SiteContext, Summary } from './types.js';
+import { nativeTokenCoverage } from './consumer.js';
 import {
   REQUIRED_STRICT_SURFACES,
   allWarnings,
@@ -18,7 +19,10 @@ export function summarize(context: SiteContext): Summary {
 
   const warnings = allWarnings(context);
   const surfaceCoverage = coverageFor(context);
-  const coverage = Object.fromEntries(surfaceCoverage.map(({ surface, status }) => [surface, status]));
+  const coverage = {
+    ...Object.fromEntries(surfaceCoverage.map(({ surface, status }) => [surface, status])),
+    nativeTokens: nativeTokenCoverage(context).coverage,
+  };
   const bindingWork = bindingWorkFor(surfaceCoverage);
   const supportedWork = [...bindingWork.supported, ...surfaceCoverage.flatMap((item) => supportedWorkFor(item.surface, item.status))];
   const unknownWork = [...bindingWork.unknown, ...surfaceCoverage.flatMap((item) => unknownWorkFor(item.surface, item.status))];

@@ -11,6 +11,22 @@ export {
 export { orderManifestForJson, stringifyManifest } from './serialize.js';
 export { parseThemeJsonSettings, type ThemeToken, type ThemeTokenKind, type ThemeTokenOrigin } from './theme.js';
 export { summarize, formatSummaryMarkdown } from './summary.js';
+export {
+  focusContext,
+  lookupBlock,
+  lookupField,
+  lookupNativeToken,
+  nativeTokenCoverage,
+  type FieldReference,
+  type FoundLookupResult,
+  type FocusedContext,
+  type FocusOptions,
+  type LookupResult,
+  type LookupStatus,
+  type NativeTokenReference,
+  type RegistryCoverage,
+  type UnresolvedLookupResult,
+} from './consumer.js';
 
 import { ZodError } from 'zod/v4';
 import { collectRest } from './collector/rest.js';
@@ -203,7 +219,13 @@ function contentModelEvidence(value: unknown): boolean {
 
 function themeEvidence(value: unknown): boolean {
   const theme = recordOrUndefined(value);
-  return Boolean(theme && (hasOwn(theme, 'settings') || tokenCollections(theme.tokens)));
+  return Boolean(theme && (hasOwn(theme, 'settings') || nativeTokenRegistry(theme.tokens) || tokenCollections(theme.tokens)));
+}
+
+/** An explicit presets array, including [], is complete native-token evidence. */
+function nativeTokenRegistry(value: unknown): boolean {
+  const tokens = recordOrUndefined(value);
+  return Boolean(tokens && recordArray(tokens.presets));
 }
 
 function tokenCollections(value: unknown): boolean {

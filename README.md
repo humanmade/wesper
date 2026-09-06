@@ -57,6 +57,23 @@ Every collected token includes native forms in `references`: `cssCustomProperty`
 style attribute; it does not need to recreate WordPress preset syntax. Wesper never infers roles
 such as “primary” from a slug or value.
 
+## Consumer helpers
+
+`lookupNativeToken`, `lookupBlock`, and `lookupField` provide small, offline lookups over a
+validated manifest. Each reports `found`, `absent` (only when its registry was completely
+collected), or `unknown` (when evidence is partial or unavailable). Native-token coverage is
+separate from theme-settings coverage: `theme.tokens.presets: []` proves an empty native registry,
+while settings-only and legacy token collections do not.
+
+Lookups are exact: token kind and slug, block name, and field key or name must be reported in the
+manifest. A field lookup requires a key or name and can additionally qualify the source. When a
+lookup is `found`, its `value` is the reported record; field `args` are preserved verbatim.
+
+`focusContext` creates a deterministic derived task view for explicit post types, blocks, and
+token kinds. Omitted or empty selectors select nothing. Its `sourceManifestHash` identifies the
+parent manifest only—it does not claim to hash the projection. Run `npm run example:consumer-helpers`
+for a portable, executable example covering colour, typography, spacing, and a field binding.
+
 `theme.settings` retains the collected settings and their constraints (for example custom colour,
 typography, spacing, layout, and unit controls). Its `settingsOrigin` is the exact layer read:
 `merged` for WP-CLI (`core + blocks + theme + user`) and `theme` for REST global styles

@@ -50,6 +50,7 @@
     "check:package": "node scripts/check-package.mjs && npm pack --dry-run",
     "clean": "rm -rf dist",
     "dev": "tsx src/cli.ts",
+    "example:consumer-helpers": "tsx examples/consumer-helpers.ts",
     "generate:schema": "node --import tsx scripts/write-schema.mjs",
     "prepack": "npm run build",
     "test": "vitest run",
