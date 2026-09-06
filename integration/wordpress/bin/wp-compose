@@ -1,0 +1,6 @@
+#!/bin/sh
+# Adapter used by collectWpCli: it keeps the product collector executing its
+# embedded PHP through a real wp-cli process, rather than evaluating PHP here.
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+exec docker compose -p "${WESPER_COMPOSE_PROJECT:?}" -f "$root/integration/wordpress/compose.yml" exec -T wpcli wp "$@"

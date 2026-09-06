@@ -34,6 +34,42 @@ block-runner convert hero.html --bind --context site.context.json
 npm install --global wesper
 ```
 
+## Supported versions and conformance checks
+
+Wesper supports Node.js 20 or later. Pull requests exercise the minimum supported
+Node line (20) and the current Node LTS line (24). The package is built for Node 20.
+
+The WordPress collector supports WordPress 6.5 or later. Its conformance matrix uses
+WordPress 6.5.5, on the first Block Bindings release line, and 7.1.0, a later core
+API boundary. These are deliberately pinned tested boundaries so a pull request
+has reproducible evidence; update the upper boundary intentionally when
+WordPress core changes.
+
+Run the fast repository checks locally with:
+
+```sh
+npm run verify
+```
+
+The integration suite provisions a disposable WordPress install and only uses its
+sanitised fixture content. It invokes both the real WP-CLI PHP collector and the core
+REST API with permitted and denied access, then compares the documented equivalent
+surfaces and checks a controlled synthetic pattern in both transports. It also verifies
+theme and user overrides, token-kind collisions, registered and protected meta, absent
+sources, registered patterns, deterministic hashes, coverage,
+and native references. No production site or credentials are used.
+
+Docker and Node.js are required to run it locally. Select a matrix version when needed:
+
+```sh
+WORDPRESS_VERSION=6.5.5 npm run test:integration
+WORDPRESS_VERSION=7.1.0 npm run test:integration
+```
+
+Fixture setup can create its disposable database, site, and test registrations. The
+collector itself remains read-only: it does not write site content, fields, or binding
+sources.
+
 ## Why it exists
 
 It is the read half of the agentic-WordPress loop: **read the site (wesper) → author native

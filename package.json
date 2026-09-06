@@ -54,6 +54,7 @@
     "generate:schema": "node --import tsx scripts/write-schema.mjs",
     "prepack": "npm run build",
     "test": "vitest run",
+    "test:integration": "sh integration/wordpress/run-real-wordpress.sh",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test && npm run build && npm run check:package"
   },
