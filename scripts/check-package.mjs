@@ -23,8 +23,14 @@ try {
   for (const file of allowed) if (!actual.has(file)) throw new Error(`Package is missing required file: ${file}`);
   for (const file of actual) if (!allowed.has(file)) throw new Error(`Package contains disallowed file: ${file}`);
 
+  // Install exactly the packed artifact into an empty consumer project. This
+  // deliberately exercises its dependency declaration and bin metadata rather
+  // than reconstructing either from this checkout.
   await writeFile(path.join(scratch, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-  await execFileAsync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', artifact], { cwd: scratch, env: npmEnv });
+  await execFileAsync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', artifact], {
+    cwd: scratch,
+    env: npmEnv,
+  });
   await writeFile(path.join(scratch, 'verify.mjs'), `
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
@@ -43,7 +49,8 @@ JSON.parse(await readFile(path.join(packageRoot, 'schemas/site-context-v1.schema
   await execFileAsync(process.execPath, ['verify.mjs'], { cwd: scratch });
 
   const packageRoot = path.join(scratch, 'node_modules', 'wesper');
-  const cli = await readFile(path.join(packageRoot, 'dist', 'cli.js'), 'utf8');
+  const cliPath = path.join(packageRoot, 'dist', 'cli.js');
+  const cli = await readFile(cliPath, 'utf8');
   if (!cli.startsWith('#!/usr/bin/env node')) throw new Error('dist/cli.js is missing the node shebang.');
   const bin = path.join(scratch, 'node_modules', '.bin', 'wesper');
   const help = await execFileAsync(bin, ['--help'], { cwd: scratch });

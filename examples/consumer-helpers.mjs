@@ -13,7 +13,15 @@ const tokens = [
 ];
 const price = lookupField(context, { postType: 'product', key: 'price', source: 'core/post-meta' });
 const paragraph = lookupBlock(context, 'core/paragraph');
-if (tokens.some((result) => result.status !== 'found') || price.status !== 'found' || paragraph.status !== 'found') throw new Error('Expected collected references were not found.');
+if (tokens.some((result) => result.status !== 'found') || price.status !== 'found' || paragraph.status !== 'found') {
+  throw new Error('Expected collected references were not found.');
+}
+assertEqual(tokens.map((result) => result.value.references), [
+  { cssCustomProperty: '--wp--preset--color--primary', cssValue: 'var(--wp--preset--color--primary)', blockStyle: 'var:preset|color|primary' },
+  { cssCustomProperty: '--wp--preset--font-family--body', cssValue: 'var(--wp--preset--font-family--body)', blockStyle: 'var:preset|font-family|body' },
+  { cssCustomProperty: '--wp--preset--font-size--large', cssValue: 'var(--wp--preset--font-size--large)', blockStyle: 'var:preset|font-size|large' },
+  { cssCustomProperty: '--wp--preset--spacing--40', cssValue: 'var(--wp--preset--spacing--40)', blockStyle: 'var:preset|spacing|40' },
+], 'native references');
 assertEqual(price.value.args, { key: 'price', default: 0, options: { currency: 'USD', precision: 2 } }, 'field args');
 
 const primaryColor = checkTokenReference(context, { kind: 'color', slug: 'primary' });
