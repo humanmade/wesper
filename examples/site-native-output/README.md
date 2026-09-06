@@ -25,4 +25,17 @@ Every result directory contains `record.json`, raw stdout/stderr and command met
 
 The focused arm intentionally fails as a recorded blocker if the packaged Block Runner CLI cannot consume `kind: "wesper.focused-context"`. That is a consumer capability gap, not a reason to silently substitute the full manifest or invent a focused result.
 
+## Block Runner discovery replacement map
+
+The recorder does not add a Block Runner-specific collection path to Wesper. The following map records the consumer seams it is intended to replace, based on Block Runner's source at the packaged-consumer handoff:
+
+| Block Runner seam | Wesper boundary | What remains with Block Runner |
+| --- | --- | --- |
+| `token-resolver: wpcli` | `collect({ collector: 'wp-cli' })` returns the manifest and its native presets | selecting the resolver, caching, and applying tokens to conversion output |
+| `token-resolver: rest` | `collect({ collector: 'rest' })` returns the manifest and its native presets | selecting credentials/resolver policy, caching, and applying tokens |
+| `block-runner context` | `collect()` plus `stringifyManifest()` writes the portable manifest | CLI argument handling and output placement |
+| `--context site.context.json` | `validate()` reads a full manifest; `focusContext()` produces the smaller task view | converting the selected token values and block capabilities into its own output rules |
+
+The focused view is intentionally not a `SiteContext`, so a consumer must recognize `kind: "wesper.focused-context"` before it adapts the view's `blocks` and `tokens`. A package that accepts only full manifests is recorded as blocked by the focused arm. Neither the fixture nor the recorder establishes that any representative WordPress site has the same settings, support matrix, latency, or output quality.
+
 The recorder leaves its temporary consumer in place and records its path, so a failed run remains inspectable. Remove it manually when no longer needed.
