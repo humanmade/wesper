@@ -236,7 +236,7 @@ describe('WP-CLI collector', () => {
     expect(helper).toBeDefined();
 
     const output = execFileSync(
-      '/opt/homebrew/bin/php',
+      'php',
       ['-r', `${helper}\necho json_encode(array('attributes' => wesper_json_map(array()), 'supports' => wesper_json_map(array()), 'supportedAttributes' => wesper_json_map(array())));`],
       { encoding: 'utf8' },
     );
