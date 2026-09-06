@@ -158,6 +158,14 @@ describe('reference compatibility', () => {
     expect(result.status).toBe('incompatible');
     expect(result.reasons.find((reason) => reason.code === 'binding_source.absent')).toMatchObject({ coverage: 'complete' });
 
+    const inverse = rawFixture();
+    inverse.bindings.warnings = [warning('sources.partial', 'bindings.sources', 'partial')];
+    const inverseResult = checkBindingReference(parse(inverse), { ...PRICE, attribute: 'missing' });
+    expect(inverseResult.status).toBe('incompatible');
+    expect(inverseResult.reasons.find((reason) => reason.code === 'binding_attribute.absent')).toMatchObject({ coverage: 'complete' });
+    expect(inverseResult.reasons.find((reason) => reason.code === 'binding_source.found')).toBeDefined();
+    expect(inverseResult.reasons.find((reason) => reason.code === 'field.found')).toBeDefined();
+
     const conflict = checkBindingReference(validContext(), {
       ...PRICE,
       field: { postType: 'product', key: 'price', source: 'core/post-data' } as any,
@@ -168,7 +176,7 @@ describe('reference compatibility', () => {
     ]));
   });
 
-  it('keeps complete source evidence compatible with a defaulted supported-attribute registry across round trips', () => {
+  it('keeps complete source evidence decisive with a defaulted supported-attribute registry across round trips', () => {
     const raw = rawFixture();
     delete raw.bindings.supportedAttributes;
 
@@ -197,7 +205,7 @@ describe('reference compatibility', () => {
     expect(checkBindingReference(roundTrip.context as SiteContext, { ...PRICE, source: 'missing/source' })).toEqual(result);
   });
 
-  it('keeps complete supported-attribute evidence compatible with a defaulted source registry across round trips', () => {
+  it('keeps complete supported-attribute evidence decisive with a defaulted source registry across round trips', () => {
     const raw = rawFixture();
     delete raw.bindings.sources;
     for (const postType of raw.contentModel.postTypes) {
