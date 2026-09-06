@@ -95,20 +95,34 @@ such as “primary” from a slug or value.
 
 ## Consumer helpers
 
-`lookupNativeToken`, `lookupBlock`, and `lookupField` provide small, offline lookups over a
-validated manifest. Each reports `found`, `absent` (only when its registry was completely
-collected), or `unknown` (when evidence is partial or unavailable). Native-token coverage is
-separate from theme-settings coverage: `theme.tokens.presets: []` proves an empty native registry,
-while settings-only and legacy token collections do not.
+`checkTokenReference` and `checkBindingReference` provide small, offline compatibility checks over
+a validated manifest. They return `compatible`, `incompatible`, or `unknown`, along with the
+manifest's `sourceManifestHash`, deterministic reasons, relevant warnings, coverage, and stable
+manifest evidence identifiers. The hash attributes the snapshot behind a conclusion; validation
+does not attest its integrity.
 
-Lookups are exact: token kind and slug, block name, and field key or name must be reported in the
-manifest. A field lookup requires a key or name and can additionally qualify the source. When a
-lookup is `found`, its `value` is the reported record; field `args` are preserved verbatim.
+`checkTokenReference` accepts an explicit native token `kind` and `slug`. It only uses
+`theme.tokens.presets`: a found preset is compatible and returns the reported CSS and block-style
+references verbatim. A missing preset is incompatible only when that native registry was completely
+collected; missing, legacy, settings-only, partial, or unavailable evidence is unknown.
 
-`focusContext` creates a deterministic derived task view for explicit post types, blocks, and
-token kinds. Omitted or empty selectors select nothing. Its `sourceManifestHash` identifies the
-parent manifest only—it does not claim to hash the projection. Run `npm run example:consumer-helpers`
-for a portable, executable example covering colour, typography, spacing, and a field binding.
+`checkBindingReference` accepts an explicit block, attribute, source, and a source-qualified field
+selector containing a post type plus a key or name. It independently establishes the registered
+block, its supported attribute, the binding source, and the exact bindable field. A compatible
+result includes the reported source and field `args` verbatim, so consumers never invent
+source-specific binding arguments. Evidence gaps remain unknown, while explicitly reported
+`bindable: false` is incompatible.
+
+These checks describe only the supplied manifest snapshot. They do not establish runtime rendering,
+permissions, available post context, or semantic design suitability. Literal replacement is outside
+these explicit-reference checks: Wesper does not declare literals wrong or suggest replacements.
+
+`lookupNativeToken`, `lookupBlock`, and `lookupField` remain available for direct offline registry
+lookups. `focusContext` creates a deterministic derived task view for explicit post types, blocks,
+and token kinds. Omitted or empty selectors select nothing. Its `sourceManifestHash` identifies the
+parent manifest only—it does not claim to hash the projection. Run
+`npm run example:consumer-helpers` for a portable consumer that checks an explicit primary colour
+reference and a product-price binding before proceeding, then prints their evidence.
 
 `theme.settings` retains the collected settings and their constraints (for example custom colour,
 typography, spacing, layout, and unit controls). Its `settingsOrigin` is the exact layer read:

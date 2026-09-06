@@ -27,6 +27,15 @@ export {
   type RegistryCoverage,
   type UnresolvedLookupResult,
 } from './consumer.js';
+export {
+  checkBindingReference,
+  checkTokenReference,
+  type BindingFieldSelector,
+  type BindingReference,
+  type CompatibilityReason,
+  type CompatibilityResult,
+  type CompatibilityStatus,
+} from './compatibility.js';
 
 import { ZodError } from 'zod/v4';
 import { collectRest } from './collector/rest.js';
