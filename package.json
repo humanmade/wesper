@@ -39,18 +39,21 @@
   "files": [
     "dist",
     "schemas",
+    "examples/consumer-helpers.mjs",
+    "examples/fixtures/consumer-manifest.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "package.json"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run generate:schema && tsup src/index.ts src/cli.ts --format esm --dts --clean --target node20",
-    "check:package": "node scripts/check-package.mjs && npm pack --dry-run",
-    "clean": "rm -rf dist",
+    "build": "npm run generate:schema && node scripts/clean-dist.mjs && tsup",
+    "check:package": "node scripts/check-package.mjs",
+    "clean": "node scripts/clean-dist.mjs",
     "dev": "tsx src/cli.ts",
-    "example:consumer-helpers": "tsx examples/consumer-helpers.ts",
+    "example:consumer-helpers": "npm run build && node examples/consumer-helpers.mjs",
     "generate:schema": "node --import tsx scripts/write-schema.mjs",
     "prepack": "npm run build",
     "test": "vitest run",

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collect, sourceHash, stringifyManifest } from '../index.js';
+import { COLLECTOR_VERSION } from './normalize.js';
 
 interface FetchStub {
   body: unknown;
@@ -80,6 +81,7 @@ describe('REST collector', () => {
     const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
 
     expect(context.provenance.collector).toBe('rest');
+    expect(context.provenance.collectorVersion).toBe(COLLECTOR_VERSION);
     expect(context.theme?.tokens?.colors[0]).toMatchObject({
       id: 'color:primary', kind: 'color', slug: 'primary', value: '#0057ff', origin: 'unknown',
       references: { cssCustomProperty: '--wp--preset--color--primary', cssValue: 'var(--wp--preset--color--primary)', blockStyle: 'var:preset|color|primary' },
@@ -91,6 +93,7 @@ describe('REST collector', () => {
     // Several REST surfaces are intentionally unavailable over core endpoints.
     // Their informational warnings still make the evidence partial.
     expect(context.provenance.partial).toBe(true);
+    expect(JSON.stringify(context.warnings)).not.toContain('get-site-context');
   });
 
   it('rejects strict REST collection when binding evidence is unavailable', async () => {

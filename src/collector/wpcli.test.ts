@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
-import { normalizeCollectorOutput } from './normalize.js';
+import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
 import { collect, sourceHash, stringifyManifest, validate } from '../index.js';
 import { coverageFor, strictCoverageGaps } from '../warnings.js';
 
@@ -55,6 +55,7 @@ describe('WP-CLI collector', () => {
     expect(context.bindings?.supportedAttributes['core/paragraph']).toEqual(['content']);
     expect(context.theme?.tokens?.colors[0]).toMatchObject({ id: 'color:primary', value: '#0057ff' });
     expect(context.provenance.partial).toBe(false);
+    expect(context.provenance.collectorVersion).toBe(COLLECTOR_VERSION);
   });
 
   it('keeps unavailable global settings absent instead of serializing an authoritative empty array', () => {

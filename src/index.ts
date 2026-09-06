@@ -62,8 +62,6 @@ export async function collect(options: CollectOptions): Promise<SiteContext> {
         return enforceStrict(await collectWpCli({ ...options, collector }), options);
       case 'rest':
         return enforceStrict(await collectRest({ ...options, collector }), options);
-      case 'fixture':
-        throw new UsageError('Fixture collection is represented by validate() on a manifest file.');
       default:
         throw new UsageError(`Unsupported collector: ${String(collector)}`);
     }

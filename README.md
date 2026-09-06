@@ -122,7 +122,9 @@ lookups. `focusContext` creates a deterministic derived task view for explicit p
 and token kinds. Omitted or empty selectors select nothing. Its `sourceManifestHash` identifies the
 parent manifest only—it does not claim to hash the projection. Run
 `npm run example:consumer-helpers` for a portable consumer that checks an explicit primary colour
-reference and a product-price binding before proceeding, then prints their evidence.
+reference and a product-price binding before proceeding, then prints their evidence. The published
+package ships this executable as `examples/consumer-helpers.mjs`, using only the synthetic fixture;
+it neither mutates WordPress content nor infers bindings.
 
 `theme.settings` retains the collected settings and their constraints (for example custom colour,
 typography, spacing, layout, and unit controls). Its `settingsOrigin` is the exact layer read:
@@ -259,6 +261,8 @@ warning is informational. Warnings may declare their coverage as `complete`, `pa
 
 For programmatic collection, the library exposes the corresponding error codes:
 `WESPER_STRICT_POLICY`, `WESPER_USAGE`, and `WESPER_TRANSPORT`.
+
+MCP, Abilities, ACF, diff/freshness, and WordPress mutations are outside the current delivery scope.
 
 ## License
 
