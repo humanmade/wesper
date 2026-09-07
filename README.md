@@ -6,6 +6,15 @@ Wesper is a read-only dependency for discovering what a WordPress site can safel
 npm install wesper
 ```
 
+The native-reference helpers below require Wesper 0.0.3. Until that release is published, build a local tarball from this checkout and install it in the consumer project:
+
+```sh
+npm ci
+npm pack
+# Run this in the consumer project, adjusting the path to this checkout.
+npm install /path/to/wesper-0.0.3.tgz
+```
+
 Use it from a library first:
 
 ```ts
@@ -87,9 +96,9 @@ Native theme tokens include stable `id`, kind, slug, value, origin, and `referen
 
 ### Compatibility checks
 
-`checkTokenReference` checks an explicit native-token `kind` and `slug`; `checkBindingReference` checks an explicit block, attribute, source, and field selector. Each returns `compatible`, `incompatible`, or `unknown`, with deterministic reasons, stable manifest identifiers, relevant warnings and coverage, plus the manifest `sourceManifestHash` behind the conclusion. Missing or partial evidence is conservatively `unknown`; only complete evidence can establish an absence.
+`checkTokenReference` checks an explicit native-token `kind` and `slug`; `checkBindingReference` checks an explicit block, attribute, source, and field selector. Each returns `compatible`, `incompatible`, or `unknown`, with deterministic reasons, stable manifest identifiers, relevant warnings and coverage, plus the manifest `sourceManifestHash` behind the conclusion. Found evidence can establish compatibility even when coverage is partial; a missing reference is `unknown` under incomplete evidence, and only complete evidence can establish an absence.
 
-Binding prerequisites are checked independently: the block, supported attribute, source, and exact source-qualified field must each be supported. Compatible field and source `args` are returned verbatim, never inferred or rewritten. These checks concern manifest compatibility only—not runtime rendering, permissions, post context, or semantic/design choices. They do not diagnose literals or propose replacements; a consumer that adds an opt-in literal suggestion must present its supporting evidence rather than treating every literal as wrong.
+Binding prerequisites are checked independently: the block, supported attribute, source, and exact source-qualified field must each be supported. Compatible field `args` are returned verbatim, never inferred or rewritten. These checks concern manifest compatibility only—not runtime rendering, permissions, post context, or semantic/design choices. They do not diagnose literals or propose replacements; a consumer that adds an opt-in literal suggestion must present its supporting evidence rather than treating every literal as wrong.
 
 ### Binding join
 
@@ -97,7 +106,7 @@ Before writing `metadata.bindings`, consumers join `bindings.supportedAttributes
 
 The field's source must be one of the reported `bindings.sources`; `bindings.available: false` means that binding evidence was explicitly unavailable and cannot coexist with source or attribute evidence.
 
-Every manifest records provenance, a canonical `sourceHash`, `provenance.partial`, and warnings. The hash is SHA-256 over the redacted, schema-defaulted, validated document after sorting only order-insensitive collections; it uses JCS canonical JSON. `collectedAt` and `sourceHash` itself are excluded, while content-order arrays such as `theme.settings` are preserved. `validate()` establishes schema validity and defaults, but does not attest the supplied source-hash integrity. Compare `sourceHash(context)` to `context.provenance.sourceHash` when integrity is required.
+Every manifest records provenance, a canonical `sourceHash`, `provenance.partial`, and warnings. The hash is SHA-256 over the redacted, schema-defaulted, validated document after sorting only order-insensitive collections; it uses JCS canonical JSON. `provenance.collectedAt`, `provenance.sourceHash`, and `provenance.collectionMetrics` are excluded, while content-order arrays such as `theme.settings` are preserved. `validate()` establishes schema validity and defaults, but does not attest the supplied source-hash integrity. Compare `sourceHash(context)` to `context.provenance.sourceHash` when integrity is required.
 
 A present empty registry means it was read and empty; omitted evidence is never treated as empty. Warnings declare coverage as `complete`, `partial`, or `unavailable`; an undeclared warning is treated conservatively as partial. Strict collection requires complete blocks, bindings, and content-model evidence, including a surface explicitly read as empty.
 
@@ -134,11 +143,11 @@ node examples/consumer-helpers.mjs
 
 Run `npm run example:consumer-proof` from a checkout to build and install the candidate in a clean consumer project, then compare fixed Block Runner inputs with no site tokens, full context and focused context. A separate Node example checks native references and field bindings through the installed Wesper API.
 
-The comparison uses synthetic fixtures and the published `block-runner@0.8.0` package. It records emitted native references, retained intentional literals, validity and context size. See [the reproducible setup and its limits](docs/consumer-proof.md). The proof runner is repository tooling; Block Runner is not a Wesper runtime dependency.
+The comparison uses synthetic fixtures and the published `block-runner@0.8.0` package. It records emitted native references, retained intentional literals, validity and context size. See [the reproducible setup and its limits](https://github.com/humanmade/wesper/blob/main/docs/consumer-proof.md). The proof runner is repository tooling; Block Runner is not a Wesper runtime dependency.
 
 ## Versions and contribution
 
-Wesper requires Node.js 20 or later, builds for Node 20, and CI checks Node 20 and 24. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and verification.
+Wesper requires Node.js 20 or later, builds for Node 20, and CI checks Node 20 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
 
 The package version in `package.json` drives `wesper --version`. `COLLECTOR_VERSION` is separately versioned for shared WP-CLI/REST collection semantics and changes only when those semantics change. `contextVersion: 1` is the manifest compatibility version.
 

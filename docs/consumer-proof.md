@@ -64,4 +64,4 @@ A local run on 6 September 2026 used the Wesper 0.0.3 candidate, Node 24.18.0 an
 
 The focused view was 730 bytes smaller for this fixture. The independent consumer returned compatible for the known token/binding, incompatible for an absent token on complete evidence, and unknown for the missing native registry. These are fixture results; rerun the command against a later candidate instead of treating them as a general benchmark.
 
-The CI package job runs this proof on Node 24 and retains its artifacts for 14 days. The independent Wesper consumer is also exercised by package verification on Node 20 and 24.
+The [merged 0.0.3 candidate passed CI](https://github.com/humanmade/wesper/actions/runs/34023227537), including this proof on Node 24 and package verification on Node 20 and 24. The CI package job retains consumer-proof artifacts for 14 days. The independent Wesper consumer is also exercised by package verification on both Node versions.

@@ -7,9 +7,11 @@ npm ci
 npm run verify
 ```
 
+`npm run verify` covers type checking, unit tests, the build, and installed-package checks. Consumer proof and Docker-based WordPress checks run separately.
+
 Version sources are deliberately separate:
 
-- `package.json` is the published package version, used by `wesper --version`.
+- `package.json` is the package version, used by `wesper --version`; it is not necessarily the version currently published to npm.
 - `COLLECTOR_VERSION` in `src/collector/normalize.ts` identifies the shared WP-CLI/REST collection semantics. Bump it intentionally when those semantics change.
 - `contextVersion` is the manifest compatibility version. Version `1` identifies the V1 document contract.
 
@@ -17,7 +19,7 @@ Version sources are deliberately separate:
 
 ## Consumer and WordPress checks
 
-`npm run example:consumer-proof` builds and packs this checkout, installs the tarball and pinned Block Runner package into a temporary consumer project, and records the comparison under ignored `build/consumer-proof/`. It needs npm registry access but no site or model credentials. See [consumer proof](docs/consumer-proof.md) for the assertions, outputs and interpretation.
+`npm run example:consumer-proof` builds and packs this checkout, installs the tarball and pinned Block Runner package into a temporary consumer project, and records the comparison under ignored `build/consumer-proof/`. It needs npm registry access but no site or model credentials. See [consumer proof](https://github.com/humanmade/wesper/blob/main/docs/consumer-proof.md) for the assertions, outputs and interpretation.
 
 The collector conformance suite provisions a disposable synthetic WordPress site with Docker:
 
