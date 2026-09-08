@@ -6,14 +6,7 @@ Wesper is a read-only dependency for discovering what a WordPress site can safel
 npm install wesper
 ```
 
-The native-reference helpers below require Wesper 0.0.3. Until that release is published, build a local tarball from this checkout and install it in the consumer project:
-
-```sh
-npm ci
-npm pack
-# Run this in the consumer project, adjusting the path to this checkout.
-npm install /path/to/wesper-0.0.3.tgz
-```
+The native-reference helpers below require Wesper 0.0.3 or later.
 
 Use it from a library first:
 
