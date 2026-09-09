@@ -70,6 +70,27 @@ describe('consumer helpers', () => {
     expect(lookupField(partialContext, { postType: 'product', key: 'missing' })).toMatchObject({ status: 'unknown', coverage: 'partial' });
   });
 
+  it('preserves the legacy non-core classification without deriving block ownership', () => {
+    const raw = rawFixture();
+    raw.blocks.types.push({
+      name: 'theme/example',
+      attributes: {},
+      supports: {},
+      source: 'plugin',
+    });
+    const context = parse(raw);
+
+    expect(lookupBlock(context, 'theme/example')).toMatchObject({
+      status: 'found',
+      value: { name: 'theme/example', source: 'plugin' },
+    });
+    const focused = focusContext(context, { blocks: ['theme/example'] });
+    expect(focused.blocks).toEqual([
+      expect.objectContaining({ name: 'theme/example', source: 'plugin' }),
+    ]);
+    expect(focused.blocks[0]).not.toHaveProperty('owner');
+  });
+
   it('keeps source qualification exact for equal field names', () => {
     const context = validContext();
     expect(lookupField(context, { postType: 'product', key: 'date', source: 'core/post-data' })).toMatchObject({

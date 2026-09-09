@@ -126,7 +126,9 @@ export const blockTypeSchema = z
     category: z.string().nullable().optional(),
     attributes: z.record(z.string(), jsonValueSchema),
     supports: z.record(z.string(), jsonValueSchema),
-    source: z.enum(['core', 'plugin']),
+    source: z.enum(['core', 'plugin']).describe(
+      'Legacy namespace classification: core means a core/* block name; plugin means any non-core block name. It does not identify whether the implementation is owned by a plugin, theme, MU plugin, or another source.',
+    ),
   })
   .catchall(jsonValueSchema);
 

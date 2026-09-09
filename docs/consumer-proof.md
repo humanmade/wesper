@@ -32,6 +32,14 @@ The same input is processed without site tokens, with the full manifest's tokens
 
 The independent Node consumer imports Wesper's lookup and compatibility helpers. It checks a known token, an explicit `core/paragraph` content binding to the fixture's `core/post-meta` field, a missing token in a complete registry, and a missing native registry. These must return compatible, incompatible or unknown according to the collected evidence. The field's binding arguments are preserved verbatim.
 
+The V1 block `source` field is a legacy namespace classification, not ownership
+provenance: `core` means a `core/*` block name and `plugin` means any other block
+name. A `plugin` value must not be used to infer that the implementation belongs
+to a plugin; it may be supplied by a theme, MU plugin, shared package, or another
+source. Likewise, composition fields that V1 does not collect—such as parent,
+ancestor, allowed-child, or context declarations—must not be interpreted as
+evidence that placement is unrestricted.
+
 The fixture's placeholder hash is replaced with a hash of its validated document for this controlled comparison. That is fixture preparation, not a recommendation to overwrite a supplied manifest's hash when checking integrity.
 
 ## What this replaces
