@@ -115,6 +115,27 @@ export const pluginSchema = z
     version: z.string().optional(),
     active: z.boolean(),
     networkActive: z.boolean().optional(),
+    kind: z.enum(['plugin', 'mu-plugin']).optional(),
+  })
+  .catchall(jsonValueSchema);
+
+export const blockStyleSchema = z
+  .object({
+    name: identifierSchema,
+    label: z.string().nullable().optional(),
+    isDefault: z.boolean().optional(),
+  })
+  .catchall(jsonValueSchema);
+
+export const blockAssetsSchema = z
+  .object({
+    editorScripts: z.array(identifierSchema).default([]),
+    scripts: z.array(identifierSchema).default([]),
+    viewScripts: z.array(identifierSchema).default([]),
+    viewScriptModules: z.array(identifierSchema).default([]),
+    editorStyles: z.array(identifierSchema).default([]),
+    styles: z.array(identifierSchema).default([]),
+    viewStyles: z.array(identifierSchema).default([]),
   })
   .catchall(jsonValueSchema);
 
@@ -129,6 +150,14 @@ export const blockTypeSchema = z
     source: z.enum(['core', 'plugin']).describe(
       'Legacy namespace classification: core means a core/* block name; plugin means any non-core block name. It does not identify whether the implementation is owned by a plugin, theme, MU plugin, or another source.',
     ),
+    parent: z.array(identifierSchema).nullable().optional(),
+    ancestor: z.array(identifierSchema).nullable().optional(),
+    allowedBlocks: z.array(identifierSchema).nullable().optional(),
+    usesContext: z.array(identifierSchema).optional(),
+    providesContext: z.record(identifierSchema, identifierSchema).optional(),
+    styles: z.array(blockStyleSchema).optional(),
+    assets: blockAssetsSchema.optional(),
+    render: z.object({ isDynamic: z.boolean() }).catchall(jsonValueSchema).optional(),
   })
   .catchall(jsonValueSchema);
 
@@ -229,6 +258,8 @@ export const siteContextSchema = z
                 label: z.string().optional(),
                 public: z.boolean().optional(),
                 showInRest: z.boolean().optional(),
+                hierarchical: z.boolean().optional(),
+                supports: z.record(z.string(), jsonValueSchema).optional(),
                 taxonomies: z.array(identifierSchema).default([]),
                 fields: z.array(bindingFieldSchema).default([]),
               })

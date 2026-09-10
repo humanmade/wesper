@@ -1,6 +1,8 @@
 # Wesper
 
-Wesper is a read-only dependency for discovering what a WordPress site can safely accept, reference, and bind to. It produces a portable, provenanced context manifest for native WordPress consumers.
+Wesper is a read-only dependency that lets a WordPress site describe its capabilities once. It produces a portable, provenanced context manifest for authoring tools, migration and integration agents, diagnostics, editorial tooling, and other WordPress consumers.
+
+`site.context.json` is organized around WordPress facts rather than any one consumer. Its current domains cover site and platform identity, the presentation system, active extensions, the content model, authoring capabilities, media rules, and evidence coverage. Block Runner is one consumer of that contract; its commands and generation modes do not define Wesper's schema.
 
 ```sh
 npm install wesper
@@ -80,6 +82,8 @@ REST uses core endpoints only. It lacks binding-source evidence and registered-m
 `timeoutMs`, `restConcurrency`, `maxResponseBytes`, and `AbortSignal` are available to library callers; corresponding REST CLI flags are available for the numeric limits.
 
 ## Native references and coverage
+
+WP-CLI collection also reports must-use plugins, post-type hierarchy and supports, and registered block relationships, context, styles, asset handles, and WordPress's dynamic-render status. These are runtime registry facts. They do not identify repository ownership, reconstruct build paths, inspect editor `save()` implementations, imply that a dynamic block saves no child content, or prove front-end behavior. REST reports the overlapping core block-type fields.
 
 Native theme tokens include stable `id`, kind, slug, value, origin, and `references`: `cssCustomProperty`, `cssValue`, and `blockStyle`. For example, a colour token can produce `var:preset|color|primary` directly for a block style value. Wesper does not infer semantic roles from token names. Native-token coverage is distinct from theme-settings coverage: `theme.tokens.presets: []` proves an empty native registry, while settings-only and legacy token collections do not.
 

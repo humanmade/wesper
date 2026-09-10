@@ -30,6 +30,7 @@ services:
     volumes:
       - wordpress:/var/www/html
       - ./fixtures/wesper-contract.php:/fixtures/wesper-contract.php:ro
+      - ./fixtures/wesper-mu-contract.php:/fixtures/wesper-mu-contract.php:ro
 
   wpcli:
     # The CLI image contains WP-CLI only; the mounted volume supplies the
@@ -48,6 +49,7 @@ services:
     volumes:
       - wordpress:/var/www/html
       - ./fixtures/wesper-contract.php:/fixtures/wesper-contract.php:ro
+      - ./fixtures/wesper-mu-contract.php:/fixtures/wesper-mu-contract.php:ro
     entrypoint: ["sleep", "infinity"]
 
 volumes:

@@ -24,6 +24,7 @@ wp rewrite structure '/%postname%/' --hard
 # Docker creates mounts before WordPress initializes its named volume, so copy
 # the read-only fixture into the disposable plugin directory during setup.
 wp eval "wp_mkdir_p( WP_PLUGIN_DIR . '/wesper-contract' ); copy( '/fixtures/wesper-contract.php', WP_PLUGIN_DIR . '/wesper-contract/wesper-contract.php' );"
+wp eval "wp_mkdir_p( WPMU_PLUGIN_DIR ); copy( '/fixtures/wesper-mu-contract.php', WPMU_PLUGIN_DIR . '/wesper-mu-contract.php' );"
 wp plugin activate wesper-contract
 # Application passwords are generated per disposable run and passed only in
 # process memory to the test. They are never committed or printed.

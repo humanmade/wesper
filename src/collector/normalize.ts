@@ -11,7 +11,7 @@ import { CONTEXT_VERSION, SCHEMA_URL, type ContextWarning, type SiteContext } fr
  * independent of the package and manifest compatibility versions; bump it only
  * when the collector's observed/normalized output semantics change.
  */
-export const COLLECTOR_VERSION = '0.1.0';
+export const COLLECTOR_VERSION = '0.2.0';
 
 export function normalizeCollectorOutput(
   raw: Record<string, unknown>,
@@ -81,11 +81,7 @@ export function normalizeCollectorOutput(
   warnIfMalformed(warnings, redactedRaw, 'blocks', Boolean(blocks));
   if (blocks) {
     collected.blocks = {
-      types: sortByName(array(blocks.types)).map((block) => ({
-        ...block,
-        attributes: emptyArrayMap(block.attributes),
-        supports: emptyArrayMap(block.supports),
-      })),
+      types: sortBlocks(array(blocks.types)),
     };
   }
   const bindingsRaw = bindingSection(redactedRaw);
@@ -318,9 +314,32 @@ function sortBindingSources(items: Array<Record<string, unknown>>): Array<Record
   }));
 }
 
+function sortBlocks(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByName(items).map((block) => {
+    const assets = recordOrUndefined(block.assets);
+    return {
+      ...block,
+      attributes: emptyArrayMap(block.attributes),
+      supports: emptyArrayMap(block.supports),
+      providesContext: emptyArrayMap(block.providesContext),
+      ...(Array.isArray(block.parent) ? { parent: sortStrings(block.parent) } : {}),
+      ...(Array.isArray(block.ancestor) ? { ancestor: sortStrings(block.ancestor) } : {}),
+      ...(Array.isArray(block.allowedBlocks) ? { allowedBlocks: sortStrings(block.allowedBlocks) } : {}),
+      ...(Array.isArray(block.usesContext) ? { usesContext: sortStrings(block.usesContext) } : {}),
+      ...(Array.isArray(block.styles) ? { styles: sortByName(array(block.styles)) } : {}),
+      ...(assets ? {
+        assets: Object.fromEntries(
+          Object.entries(assets).map(([key, handles]) => [key, sortStrings(handles)]),
+        ),
+      } : {}),
+    };
+  });
+}
+
 function sortPostTypes(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
   return sortByName(items).map((postType) => ({
     ...postType,
+    supports: emptyArrayMap(postType.supports),
     fields: sortByName(array(postType.fields)),
     taxonomies: sortStrings(postType.taxonomies),
   }));

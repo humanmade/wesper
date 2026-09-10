@@ -72,6 +72,64 @@ describe('WP-CLI collector', () => {
     expect(source).toContain("$theme_data['fontSizeValues'] = $font_size_values;");
   });
 
+  it('collects consumer-neutral extension, content-model, and authoring facts', () => {
+    const source = collectorSourceForTests();
+
+    expect(source).toContain("function_exists('get_mu_plugins') ? get_mu_plugins() : array()");
+    expect(source).toContain("'kind' => 'mu-plugin'");
+    expect(source).toContain("'allowedBlocks' => isset($block_type->allowed_blocks)");
+    expect(source).toContain("'providesContext' => wesper_json_map(isset($block_type->provides_context)");
+    expect(source).toContain("'viewScriptModules' => array_values((array) (isset($block_type->view_script_module_ids)");
+    expect(source).toContain("'render' => array('isDynamic' => method_exists($block_type, 'is_dynamic')");
+    expect(source).toContain("'supports' => wesper_json_map(function_exists('get_all_post_type_supports')");
+
+    const context = normalizeCollectorOutput(
+      {
+        site: {},
+        plugins: [{ slug: 'site-context.php', name: 'Site Context', active: true, kind: 'mu-plugin' }],
+        blocks: {
+          types: [{
+            name: 'example/child',
+            attributes: {},
+            supports: {},
+            source: 'plugin',
+            parent: ['example/parent'],
+            ancestor: null,
+            allowedBlocks: null,
+            usesContext: ['postType', 'postId'],
+            providesContext: { 'example/itemId': 'itemId' },
+            styles: [{ name: 'quiet', label: 'Quiet', isDefault: true }],
+            assets: {
+              editorScripts: ['example-editor'], scripts: [], viewScripts: ['example-view'],
+              viewScriptModules: ['example/module'], editorStyles: [], styles: ['example-style'], viewStyles: [],
+            },
+            render: { isDynamic: true },
+          }],
+        },
+        contentModel: {
+          postTypes: [{
+            name: 'brief', label: 'Briefs', public: false, showInRest: true, hierarchical: true,
+            supports: { title: true, revisions: true }, taxonomies: ['topic'], fields: [],
+          }],
+        },
+        warnings: [],
+      },
+      { collector: 'wp-cli', collectorVersion: 'test' },
+    );
+
+    expect(context.plugins?.[0]).toMatchObject({ kind: 'mu-plugin', active: true });
+    expect(context.blocks?.types[0]).toMatchObject({
+      parent: ['example/parent'],
+      usesContext: ['postId', 'postType'],
+      render: { isDynamic: true },
+      assets: { viewScripts: ['example-view'], viewScriptModules: ['example/module'] },
+    });
+    expect(context.contentModel?.postTypes[0]).toMatchObject({
+      hierarchical: true,
+      supports: { title: true, revisions: true },
+    });
+  });
+
   it('rejects URL userinfo before it enters WP-CLI argv', async () => {
     const password = 'synthetic-wpcli-app-password';
 

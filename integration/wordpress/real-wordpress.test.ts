@@ -56,6 +56,22 @@ assert.deepEqual(sharedFontSize && {
 }, { id: 'font-size:wesper-shared', value: effectiveFontSize, origin: 'user', css: '--wp--preset--font-size--wesper-shared', style: 'var:preset|font-size|wesper-shared' });
 assert.notEqual(shared?.id, sharedFontSize?.id, 'identical slugs remain distinct across token kinds');
 
+const mustUsePlugin = first.plugins?.find((plugin) => plugin.slug === 'wesper-mu-contract.php');
+assert.deepEqual(mustUsePlugin && {
+  name: mustUsePlugin.name, active: mustUsePlugin.active, kind: mustUsePlugin.kind,
+}, { name: 'Wesper must-use contract fixture', active: true, kind: 'mu-plugin' });
+
+const contractBlock = first.blocks?.types.find((block) => block.name === 'wesper/contract-child');
+assert.ok(contractBlock, 'the synthetic block must be observed');
+assert.deepEqual(contractBlock.parent, ['wesper/contract-parent']);
+assert.deepEqual(contractBlock.ancestor, ['core/group']);
+assert.deepEqual(contractBlock.usesContext, ['postId', 'postType']);
+assert.deepEqual(contractBlock.providesContext, { 'wesper/itemId': 'itemId' });
+assert.deepEqual(contractBlock.styles, [{ name: 'quiet', label: 'Quiet', isDefault: true }]);
+assert.deepEqual(contractBlock.assets?.viewScripts, ['wesper-contract-view']);
+assert.deepEqual(contractBlock.assets?.styles, ['wesper-contract-style']);
+assert.equal(contractBlock.render?.isDynamic, true);
+
 const post = first.contentModel?.postTypes.find((type) => type.name === 'post');
 assert.ok(post, 'the real post type must be observed');
 const fields = new Map(post.fields.map((field) => [field.key, field]));
@@ -63,6 +79,11 @@ assert.equal(fields.get('wesper_global_meta')?.source, 'core/post-meta');
 assert.equal(fields.get('wesper_subtype_meta')?.type, 'integer');
 assert.ok(!fields.has('wesper_token_collision'), 'the globally hidden collision wins over the REST-visible subtype registration');
 assert.ok(!fields.has('wesper_filtered_meta'), 'is_protected_meta filter excludes protected registrations');
+const brief = first.contentModel?.postTypes.find((type) => type.name === 'wesper_brief');
+assert.ok(brief, 'the synthetic post type must be observed');
+assert.equal(brief.hierarchical, true);
+assert.equal(brief.supports?.title, true);
+assert.equal(brief.supports?.revisions, true);
 
 const core = await wpJson(`
   $subtype = get_registered_meta_keys('post', 'post');
@@ -108,6 +129,9 @@ try {
 } finally { globalThis.fetch = nativeFetch; }
 assert.ok(observedMethods.length > 0 && observedMethods.every((method) => method === 'GET'), 'REST collection only issued read requests');
 assert.ok(permitted.blocks?.types.length, 'authenticated REST exposes block types');
+const permittedContractBlock = permitted.blocks?.types.find((block) => block.name === 'wesper/contract-child');
+assert.ok(permittedContractBlock, 'authenticated REST exposes the synthetic block');
+assert.equal(permittedContractBlock.render?.isDynamic, true, 'REST reports WordPress core dynamic-render evidence');
 const anonymousTheme = await anonymousRequest('/wp-json/wp/v2/themes?status=active');
 assert.ok([401, 403].includes(anonymousTheme.status), 'anonymous core theme access is explicitly denied');
 const deniedThemeCoverage = coverageFor(denied, ['theme'])[0]!;

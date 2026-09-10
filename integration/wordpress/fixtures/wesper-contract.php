@@ -17,6 +17,33 @@ function wesper_contract_binding_value( $source_args, $block_instance, $attribut
 }
 
 add_action( 'init', static function (): void {
+	register_post_type( 'wesper_brief', array(
+		'label'        => 'Wesper briefs',
+		'public'       => false,
+		'show_in_rest' => true,
+		'hierarchical' => true,
+		'supports'     => array( 'title', 'revisions' ),
+	) );
+
+	wp_register_script( 'wesper-contract-view', false, array(), '1.0.0', true );
+	wp_register_style( 'wesper-contract-style', false, array(), '1.0.0' );
+	register_block_type( 'wesper/contract-child', array(
+		'api_version'         => 3,
+		'title'               => 'Wesper contract child',
+		'category'            => 'text',
+		'attributes'          => array( 'itemId' => array( 'type' => 'integer' ) ),
+		'parent'              => array( 'wesper/contract-parent' ),
+		'ancestor'            => array( 'core/group' ),
+		'uses_context'        => array( 'postId', 'postType' ),
+		'provides_context'    => array( 'wesper/itemId' => 'itemId' ),
+		'styles'              => array( array( 'name' => 'quiet', 'label' => 'Quiet', 'is_default' => true ) ),
+		'view_script_handles' => array( 'wesper-contract-view' ),
+		'style_handles'       => array( 'wesper-contract-style' ),
+		'render_callback'     => static function ( array $attributes, string $content ): string {
+			return $content;
+		},
+	) );
+
 	// Global registrations deliberately follow subtype registrations below. The
 	// collector must mirror core's global-over-subtype lookup precedence.
 	register_post_meta( 'post', 'wesper_subtype_meta', array(

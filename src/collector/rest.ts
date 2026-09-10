@@ -65,13 +65,40 @@ export async function collectRest(options: CollectOptions): Promise<SiteContext>
       }
     } },
     { surface: 'blocks', async run() {
-      const blocks = await readJson(endpoint('wp/v2/block-types', 'name,api_version,title,category,attributes,supports')) as Array<Record<string, unknown>>;
+      const blocks = await readJson(endpoint('wp/v2/block-types', 'name,api_version,title,category,attributes,supports,parent,ancestor,allowed_blocks,uses_context,provides_context,styles,is_dynamic,editor_script_handles,script_handles,view_script_handles,view_script_module_ids,editor_style_handles,style_handles,view_style_handles')) as Array<Record<string, unknown>>;
       if (!Array.isArray(blocks) || blocks.some((block) => typeof block.name !== 'string')) throw malformed();
-      return { blocks: { types: blocks.map((block) => ({ name: block.name, apiVersion: block.api_version ?? null, title: block.title ?? null, category: block.category ?? null, attributes: block.attributes ?? {}, supports: block.supports ?? {}, source: String(block.name).startsWith('core/') ? 'core' : 'plugin' })) } };
+      return { blocks: { types: blocks.map((block) => ({
+        name: block.name,
+        apiVersion: block.api_version ?? null,
+        title: block.title ?? null,
+        category: block.category ?? null,
+        attributes: block.attributes ?? {},
+        supports: block.supports ?? {},
+        source: String(block.name).startsWith('core/') ? 'core' : 'plugin',
+        parent: block.parent ?? null,
+        ancestor: block.ancestor ?? null,
+        allowedBlocks: block.allowed_blocks ?? null,
+        usesContext: block.uses_context ?? [],
+        providesContext: block.provides_context ?? {},
+        styles: Array.isArray(block.styles) ? block.styles.map((style) => {
+          const value = record(style) ?? {};
+          return { name: value.name, label: value.label ?? null, isDefault: Boolean(value.is_default) };
+        }) : [],
+        assets: {
+          editorScripts: block.editor_script_handles ?? [],
+          scripts: block.script_handles ?? [],
+          viewScripts: block.view_script_handles ?? [],
+          viewScriptModules: block.view_script_module_ids ?? [],
+          editorStyles: block.editor_style_handles ?? [],
+          styles: block.style_handles ?? [],
+          viewStyles: block.view_style_handles ?? [],
+        },
+        render: { isDynamic: Boolean(block.is_dynamic) },
+      })) } };
     } },
     { surface: 'contentModel', async run() {
       const types = await readJson(endpoint('wp/v2/types')); const typeMap = record(types); if (!typeMap) throw malformed();
-      return { contentModel: { postTypes: Object.entries(typeMap).map(([name, value]) => { const type = record(value) ?? {}; return { name, label: type.name, public: Boolean(type.viewable), showInRest: true, taxonomies: Array.isArray(type.taxonomies) ? type.taxonomies : [], fields: CORE_POST_DATA_FIELDS.map((field) => ({ ...field, args: { ...field.args } })) }; }) } };
+      return { contentModel: { postTypes: Object.entries(typeMap).map(([name, value]) => { const type = record(value) ?? {}; return { name, label: type.name, public: Boolean(type.viewable), showInRest: true, hierarchical: Boolean(type.hierarchical), supports: record(type.supports) ?? {}, taxonomies: Array.isArray(type.taxonomies) ? type.taxonomies : [], fields: CORE_POST_DATA_FIELDS.map((field) => ({ ...field, args: { ...field.args } })) }; }) } };
     } },
     { surface: 'patterns', async run() {
       const patterns = await readJson(endpoint('wp/v2/block-patterns/patterns', 'name,title,categories,block_types,post_types')) as Array<Record<string, unknown>>;

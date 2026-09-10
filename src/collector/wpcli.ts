@@ -176,11 +176,36 @@ foreach (array_values(array_unique(array_merge($active_plugins, $network_plugins
         'version' => isset($data['Version']) ? $data['Version'] : '',
         'active' => in_array($plugin_file, $active_plugins, true),
         'networkActive' => in_array($plugin_file, $network_plugins, true),
+        'kind' => 'plugin',
+    );
+}
+foreach (function_exists('get_mu_plugins') ? get_mu_plugins() : array() as $plugin_file => $data) {
+    $plugins[] = array(
+        'slug' => (string) $plugin_file,
+        'name' => isset($data['Name']) && $data['Name'] ? $data['Name'] : (string) $plugin_file,
+        'version' => isset($data['Version']) ? $data['Version'] : '',
+        'active' => true,
+        'kind' => 'mu-plugin',
     );
 }
 
 $block_types = array();
 foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $block_type) {
+    $block_styles = array();
+    $registered_styles = class_exists('WP_Block_Styles_Registry')
+        ? array_values(WP_Block_Styles_Registry::get_instance()->get_registered_styles_for_block($name))
+        : array();
+    $styles = !empty($registered_styles) ? $registered_styles : (array) (isset($block_type->styles) ? $block_type->styles : array());
+    foreach ($styles as $style) {
+        if (!is_array($style) || !isset($style['name']) || !is_string($style['name']) || trim($style['name']) === '') {
+            continue;
+        }
+        $block_styles[] = array(
+            'name' => $style['name'],
+            'label' => isset($style['label']) ? $style['label'] : null,
+            'isDefault' => !empty($style['is_default']),
+        );
+    }
     $block_types[] = array(
         'name' => $name,
         'apiVersion' => isset($block_type->api_version) ? $block_type->api_version : null,
@@ -189,6 +214,22 @@ foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name =
         'attributes' => wesper_json_map(isset($block_type->attributes) ? $block_type->attributes : array()),
         'supports' => wesper_json_map(isset($block_type->supports) ? $block_type->supports : array()),
         'source' => strpos($name, 'core/') === 0 ? 'core' : 'plugin',
+        'parent' => isset($block_type->parent) ? array_values((array) $block_type->parent) : null,
+        'ancestor' => isset($block_type->ancestor) ? array_values((array) $block_type->ancestor) : null,
+        'allowedBlocks' => isset($block_type->allowed_blocks) ? array_values((array) $block_type->allowed_blocks) : null,
+        'usesContext' => array_values((array) (isset($block_type->uses_context) ? $block_type->uses_context : array())),
+        'providesContext' => wesper_json_map(isset($block_type->provides_context) ? $block_type->provides_context : array()),
+        'styles' => $block_styles,
+        'assets' => array(
+            'editorScripts' => array_values((array) (isset($block_type->editor_script_handles) ? $block_type->editor_script_handles : array())),
+            'scripts' => array_values((array) (isset($block_type->script_handles) ? $block_type->script_handles : array())),
+            'viewScripts' => array_values((array) (isset($block_type->view_script_handles) ? $block_type->view_script_handles : array())),
+            'viewScriptModules' => array_values((array) (isset($block_type->view_script_module_ids) ? $block_type->view_script_module_ids : array())),
+            'editorStyles' => array_values((array) (isset($block_type->editor_style_handles) ? $block_type->editor_style_handles : array())),
+            'styles' => array_values((array) (isset($block_type->style_handles) ? $block_type->style_handles : array())),
+            'viewStyles' => array_values((array) (isset($block_type->view_style_handles) ? $block_type->view_style_handles : array())),
+        ),
+        'render' => array('isDynamic' => method_exists($block_type, 'is_dynamic') ? $block_type->is_dynamic() : !empty($block_type->render_callback)),
     );
 }
 
@@ -291,6 +332,8 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
         'label' => $post_type_object->label,
         'public' => (bool) $post_type_object->public,
         'showInRest' => (bool) $post_type_object->show_in_rest,
+        'hierarchical' => isset($post_type_object->hierarchical) ? (bool) $post_type_object->hierarchical : false,
+        'supports' => wesper_json_map(function_exists('get_all_post_type_supports') ? get_all_post_type_supports($post_type_name) : array()),
         'taxonomies' => array_values(get_object_taxonomies($post_type_name)),
         'fields' => $fields,
     );

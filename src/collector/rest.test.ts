@@ -47,7 +47,14 @@ function defaultRoutes(url: string): FetchStub | undefined {
   if (url.includes('/wp/v2/block-types')) {
     return {
       body: [
-        { name: 'core/paragraph', api_version: 3, title: 'Paragraph', category: 'text', attributes: {}, supports: {} },
+        {
+          name: 'core/paragraph', api_version: 3, title: 'Paragraph', category: 'text', attributes: {}, supports: {},
+          parent: null, ancestor: null, allowed_blocks: ['core/group'], uses_context: ['postId'],
+          provides_context: { 'core/postId': 'postId' },
+          styles: [{ name: 'plain', label: 'Plain', is_default: true }], is_dynamic: true,
+          editor_script_handles: ['wp-block-editor'], script_handles: [], view_script_handles: ['paragraph-view'],
+          view_script_module_ids: ['paragraph/module'], editor_style_handles: [], style_handles: ['wp-block-paragraph'], view_style_handles: ['wp-block-paragraph-view'],
+        },
         { name: 'acme/widget', api_version: 2, title: 'Widget', category: 'widgets', attributes: {}, supports: {} },
       ],
     };
@@ -55,7 +62,7 @@ function defaultRoutes(url: string): FetchStub | undefined {
   if (url.includes('/wp/v2/types')) {
     return {
       body: {
-        post: { name: 'Posts', viewable: true, taxonomies: ['category'] },
+        post: { name: 'Posts', viewable: true, hierarchical: false, supports: { title: true, editor: true }, taxonomies: ['category'] },
       },
     };
   }
@@ -87,6 +94,18 @@ describe('REST collector', () => {
       references: { cssCustomProperty: '--wp--preset--color--primary', cssValue: 'var(--wp--preset--color--primary)', blockStyle: 'var:preset|color|primary' },
     });
     expect(context.blocks?.types.map((block) => block.name)).toEqual(['acme/widget', 'core/paragraph']);
+    expect(context.blocks?.types[1]).toMatchObject({
+      allowedBlocks: ['core/group'],
+      usesContext: ['postId'],
+      providesContext: { 'core/postId': 'postId' },
+      styles: [{ name: 'plain', label: 'Plain', isDefault: true }],
+      assets: { viewScripts: ['paragraph-view'], viewScriptModules: ['paragraph/module'], viewStyles: ['wp-block-paragraph-view'] },
+      render: { isDynamic: true },
+    });
+    expect(context.contentModel?.postTypes[0]).toMatchObject({
+      hierarchical: false,
+      supports: { title: true, editor: true },
+    });
     expect(context.contentModel?.postTypes[0]?.fields.map((field) => field.name)).toEqual(['date', 'link', 'modified']);
     expect(context.contentModel?.postTypes[0]?.fields.every((field) => !field.bindable)).toBe(true);
     expect(context.patterns?.items.map((item) => item.name)).toEqual(['core/hero']);

@@ -457,6 +457,13 @@
           },
           "networkActive": {
             "type": "boolean"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "plugin",
+              "mu-plugin"
+            ]
           }
         },
         "required": [
@@ -543,6 +550,161 @@
                   "plugin"
                 ],
                 "description": "Legacy namespace classification: core means a core/* block name; plugin means any non-core block name. It does not identify whether the implementation is owned by a plugin, theme, MU plugin, or another source."
+              },
+              "parent": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ancestor": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "allowedBlocks": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "usesContext": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/__schema10"
+                }
+              },
+              "providesContext": {
+                "type": "object",
+                "propertyNames": {
+                  "$ref": "#/definitions/__schema10"
+                },
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema10"
+                }
+              },
+              "styles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "$ref": "#/definitions/__schema10"
+                    },
+                    "label": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "isDefault": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": {
+                    "$ref": "#/definitions/__schema8"
+                  }
+                }
+              },
+              "assets": {
+                "type": "object",
+                "properties": {
+                  "editorScripts": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  "scripts": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  "viewScripts": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  "viewScriptModules": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  "editorStyles": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  "styles": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  },
+                  "viewStyles": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/__schema10"
+                    }
+                  }
+                },
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema8"
+                }
+              },
+              "render": {
+                "type": "object",
+                "properties": {
+                  "isDynamic": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "isDynamic"
+                ],
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema8"
+                }
               }
             },
             "required": [
@@ -698,6 +860,18 @@
               },
               "showInRest": {
                 "type": "boolean"
+              },
+              "hierarchical": {
+                "type": "boolean"
+              },
+              "supports": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema8"
+                }
               },
               "taxonomies": {
                 "default": [],
