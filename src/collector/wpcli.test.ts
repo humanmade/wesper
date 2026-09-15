@@ -1,4 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
@@ -24,6 +27,57 @@ vi.mock('node:child_process', async (importOriginal) => {
       callback(mockedError, { stdout: mockedStdout ?? JSON.stringify(mockedOutput), stderr: '' });
     }),
   };
+});
+
+describe('block metadata ownership', () => {
+  it('discovers included nested MU packages without listing inactive files', () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), 'wesper-mu-')));
+    try {
+      mkdirSync(join(directory, 'active'));
+      mkdirSync(join(directory, 'inactive'));
+      const active = join(directory, 'active', 'plugin.php');
+      const inactive = join(directory, 'inactive', 'plugin.php');
+      writeFileSync(active, '<?php /* Plugin Name: Active */');
+      writeFileSync(inactive, '<?php /* Plugin Name: Inactive */');
+      const output = runEmbeddedCollector({ muRoot: directory, includedFiles: [active], pluginData: { [active]: { Name: 'Active' }, [inactive]: { Name: 'Inactive' } } });
+      expect(output.plugins).toEqual([{ slug: 'active/plugin.php', name: 'Active', version: '', active: true, kind: 'mu-plugin' }]);
+    } finally {
+      execFileSync('trash', [directory]);
+    }
+  });
+
+  it('matches exact names, preserves ambiguous owners, and reports incomplete scans', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'wesper-owners-'));
+    try {
+      for (const name of ['one', 'two', 'broken']) mkdirSync(join(directory, name));
+      writeFileSync(join(directory, 'one', 'block.json'), JSON.stringify({ name: 'unrelated-namespace/statistic' }));
+      writeFileSync(join(directory, 'two', 'block.json'), JSON.stringify({ name: 'unrelated-namespace/statistic' }));
+      writeFileSync(join(directory, 'broken', 'block.json'), '{');
+      const source = collectorSourceForTests();
+      const helper = source.slice(source.indexOf('function wesper_block_metadata_owners('), source.indexOf('$owner_roots = array();'));
+      const run = (names: string[]) => JSON.parse(execFileSync('php', ['-r', `
+        function wesper_warning($code, $surface, $message) { return compact('code', 'surface', 'message'); }
+        ${helper}
+        $warnings = array();
+        $roots = json_decode(getenv('WESPER_OWNER_ROOTS'), true);
+        $result = wesper_block_metadata_owners($roots, $warnings);
+        echo json_encode(array($result, $warnings));
+      `], { encoding: 'utf8', env: { ...process.env, WESPER_OWNER_ROOTS: JSON.stringify(names.map(name => ({ directory: join(directory, name), kind: 'mu-plugin', slug: `${name}/plugin.php` }))) } }));
+      const [single] = run(['one']);
+      expect(single[1]).toBe(true);
+      expect(single[0]['unrelated-namespace/statistic']).toEqual({ status: 'matched', kind: 'mu-plugin', slug: 'one/plugin.php', evidence: 'block-metadata', path: 'block.json' });
+      mkdirSync(join(directory, 'one', 'build'));
+      writeFileSync(join(directory, 'one', 'build', 'block.json'), JSON.stringify({ name: 'unrelated-namespace/statistic' }));
+      expect(run(['one'])[0][0]['unrelated-namespace/statistic'].status).toBe('matched');
+      const [ambiguous] = run(['two', 'one']);
+      expect(ambiguous[0]['unrelated-namespace/statistic']).toEqual({ status: 'unknown', reason: 'ambiguous_metadata' });
+      const [incomplete, warnings] = run(['one', 'broken']);
+      expect(incomplete[1]).toBe(false);
+      expect(warnings[0].code).toBe('blocks.owner_scan_incomplete');
+    } finally {
+      execFileSync('trash', [directory]);
+    }
+  });
 });
 
 describe('WP-CLI collector', () => {
@@ -805,11 +859,13 @@ function cfg($key, $default = null) { global $config; return array_key_exists($k
 $wp_version = cfg('version', '6.8');
 define('ABSPATH', sys_get_temp_dir() . '/');
 define('WP_PLUGIN_DIR', sys_get_temp_dir());
+if (cfg('muRoot')) define('WPMU_PLUGIN_DIR', cfg('muRoot'));
+foreach (cfg('includedFiles', array()) as $file) require $file;
 class TestTheme { function get_stylesheet() { return 'test'; } function get_template() { return 'test'; } function get($key) { return ''; } }
 class WP_Block_Type_Registry { static function get_instance() { return new self; } function get_all_registered() { return array('core/image' => (object) array('attributes' => array(), 'supports' => array())); } }
 function wp_get_theme() { return new TestTheme; }
 function wp_get_global_settings() { return array(); }
-function get_plugin_data() { return array(); }
+function get_plugin_data($path = '') { $data = cfg('pluginData', array()); return isset($data[$path]) ? $data[$path] : array(); }
 function get_option($key, $default = '') { return $default; }
 function is_multisite() { return false; }
 function get_post_types() { return array('post' => (object) array('label' => 'Posts', 'public' => true, 'show_in_rest' => true)); }
@@ -857,7 +913,7 @@ function wpOutput(): Record<string, unknown> {
       settings: { color: { palette: [{ slug: 'primary', color: '#0057ff' }] } },
     },
     plugins: [],
-    blocks: { types: [{ name: 'core/paragraph', attributes: {}, supports: {}, source: 'core' }] },
+    blocks: { types: [{ name: 'core/paragraph', attributes: { content: { type: 'string' } }, supports: {}, source: 'core' }] },
     bindings: {
       available: true,
       sources: [

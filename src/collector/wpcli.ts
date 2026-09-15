@@ -174,6 +174,71 @@ foreach (function_exists('get_mu_plugins') ? get_mu_plugins() : array() as $plug
     );
 }
 
+// Inspect only PHP files that WordPress actually included. A directory on disk
+// alone is not evidence that a loader activated its package.
+if (defined('WPMU_PLUGIN_DIR')) {
+    $mu_root = realpath(WPMU_PLUGIN_DIR);
+    foreach (get_included_files() as $included_file) {
+        $included_path = realpath($included_file);
+        if (!$mu_root || !$included_path || strpos($included_path, $mu_root . DIRECTORY_SEPARATOR) !== 0) continue;
+        $relative = str_replace(DIRECTORY_SEPARATOR, '/', substr($included_path, strlen($mu_root) + 1));
+        if (strpos($relative, '/') === false) continue;
+        $data = get_plugin_data($included_path, false, false);
+        if (empty($data['Name'])) continue;
+        $plugins[] = array('slug' => $relative, 'name' => $data['Name'], 'version' => isset($data['Version']) ? $data['Version'] : '', 'active' => true, 'kind' => 'mu-plugin');
+    }
+}
+
+// A matching block.json identifies a package candidate, not the PHP call that
+// registered the block. Keep ambiguity and bounded-scan failures explicit.
+function wesper_block_metadata_owners($roots, &$warnings) {
+    $matches = array();
+    $complete = true;
+    $remaining = 20000;
+    foreach ($roots as $root) {
+        if (!is_dir($root['directory'])) continue;
+        try {
+            $directory = new RecursiveDirectoryIterator($root['directory'], FilesystemIterator::SKIP_DOTS);
+            $files = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator($directory, function($file) {
+                return !$file->isLink() && (!$file->isDir() || !in_array($file->getFilename(), array('node_modules', 'vendor', '.git'), true));
+            }));
+            foreach ($files as $file) {
+                if (--$remaining < 0) { $complete = false; break 2; }
+                if ($file->isLink() || !$file->isFile() || $file->getFilename() !== 'block.json') continue;
+                if ($file->getSize() > 1048576) { $complete = false; continue; }
+                $text = @file_get_contents($file->getPathname());
+                $metadata = is_string($text) ? json_decode($text, true) : null;
+                if (!is_array($metadata)) { $complete = false; continue; }
+                if (!isset($metadata['name']) || !is_string($metadata['name']) || $metadata['name'] === '') continue;
+                $owner = array('status' => 'matched', 'kind' => $root['kind'], 'slug' => $root['slug'], 'evidence' => 'block-metadata', 'path' => str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getPathname(), strlen($root['directory']) + 1)));
+                $identity = $root['kind'] . ':' . $root['slug'];
+                if (!isset($matches[$metadata['name']][$identity]) || strcmp($owner['path'], $matches[$metadata['name']][$identity]['path']) < 0) {
+                    $matches[$metadata['name']][$identity] = $owner;
+                }
+            }
+        } catch (UnexpectedValueException $error) {
+            $complete = false;
+        }
+    }
+    if (!$complete) $warnings[] = wesper_warning('blocks.owner_scan_incomplete', 'blocks', 'Block metadata ownership scan was incomplete; owners remain unknown.');
+    $owners = array();
+    foreach ($matches as $name => $candidates) {
+        $owners[$name] = count($candidates) === 1 ? reset($candidates) : array('status' => 'unknown', 'reason' => 'ambiguous_metadata');
+    }
+    return array($owners, $complete);
+}
+$owner_roots = array();
+foreach ($plugins as $plugin) {
+    if (strpos($plugin['slug'], '/') === false) continue;
+    $base = $plugin['kind'] === 'mu-plugin' ? WPMU_PLUGIN_DIR : WP_PLUGIN_DIR;
+    $directory = realpath($base . '/' . dirname($plugin['slug']));
+    if ($directory) $owner_roots[] = array('directory' => $directory, 'kind' => $plugin['kind'], 'slug' => $plugin['slug']);
+}
+if (defined('WPINC')) $owner_roots[] = array('directory' => ABSPATH . WPINC . '/blocks', 'kind' => 'core', 'slug' => 'wordpress');
+if (function_exists('get_stylesheet_directory')) $owner_roots[] = array('directory' => get_stylesheet_directory(), 'kind' => 'theme', 'slug' => $theme->get_stylesheet());
+if ($theme->get_template() !== $theme->get_stylesheet() && function_exists('get_template_directory')) $owner_roots[] = array('directory' => get_template_directory(), 'kind' => 'theme', 'slug' => $theme->get_template());
+list($block_owners, $owner_scan_complete) = wesper_block_metadata_owners($owner_roots, $warnings);
+
 $block_types = array();
 foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $block_type) {
     $block_styles = array();
@@ -199,6 +264,7 @@ foreach (WP_Block_Type_Registry::get_instance()->get_all_registered() as $name =
         'attributes' => wesper_json_map(isset($block_type->attributes) ? $block_type->attributes : array()),
         'supports' => wesper_json_map(isset($block_type->supports) ? $block_type->supports : array()),
         'source' => strpos($name, 'core/') === 0 ? 'core' : 'plugin',
+        'owner' => !$owner_scan_complete ? array('status' => 'unknown', 'reason' => 'scan_incomplete') : (isset($block_owners[$name]) ? $block_owners[$name] : array('status' => 'unknown', 'reason' => 'metadata_not_found')),
         'parent' => isset($block_type->parent) ? array_values((array) $block_type->parent) : null,
         'ancestor' => isset($block_type->ancestor) ? array_values((array) $block_type->ancestor) : null,
         'allowedBlocks' => isset($block_type->allowed_blocks) ? array_values((array) $block_type->allowed_blocks) : null,

@@ -150,6 +150,16 @@ export const blockTypeSchema = z
     source: z.enum(['core', 'plugin']).describe(
       'Legacy namespace classification: core means a core/* block name; plugin means any non-core block name. It does not identify whether the implementation is owned by a plugin, theme, MU plugin, or another source.',
     ),
+    owner: z.discriminatedUnion('status', [
+      z.object({
+        status: z.literal('matched'),
+        kind: z.enum(['core', 'plugin', 'mu-plugin', 'theme']),
+        slug: identifierSchema,
+        evidence: z.literal('block-metadata'),
+        path: identifierSchema.describe('block.json path relative to the owner directory; a metadata match, not registration or execution proof.'),
+      }),
+      z.object({ status: z.literal('unknown'), reason: z.enum(['metadata_not_found', 'ambiguous_metadata', 'scan_incomplete']) }),
+    ]).optional().describe('WP-CLI block.json matches in active plugin, included MU package, theme and core directories, excluding node_modules, vendor and .git. A match identifies a package candidate, not registration proof. Absent for transports without file access.'),
     parent: z.array(identifierSchema).nullable().optional(),
     ancestor: z.array(identifierSchema).nullable().optional(),
     allowedBlocks: z.array(identifierSchema).nullable().optional(),

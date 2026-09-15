@@ -28,19 +28,19 @@
       "$ref": "#/definitions/__schema11"
     },
     "bindings": {
-      "$ref": "#/definitions/__schema12"
+      "$ref": "#/definitions/__schema13"
     },
     "contentModel": {
-      "$ref": "#/definitions/__schema14"
-    },
-    "patterns": {
       "$ref": "#/definitions/__schema15"
     },
-    "media": {
+    "patterns": {
       "$ref": "#/definitions/__schema16"
     },
-    "warnings": {
+    "media": {
       "$ref": "#/definitions/__schema17"
+    },
+    "warnings": {
+      "$ref": "#/definitions/__schema18"
     }
   },
   "required": [
@@ -50,7 +50,7 @@
     "warnings"
   ],
   "additionalProperties": {
-    "$ref": "#/definitions/__schema18"
+    "$ref": "#/definitions/__schema19"
   },
   "definitions": {
     "__schema0": {
@@ -551,6 +551,14 @@
                 ],
                 "description": "Legacy namespace classification: core means a core/* block name; plugin means any non-core block name. It does not identify whether the implementation is owned by a plugin, theme, MU plugin, or another source."
               },
+              "owner": {
+                "description": "WP-CLI block.json matches in active plugin, included MU package, theme and core directories, excluding node_modules, vendor and .git. A match identifies a package candidate, not registration proof. Absent for transports without file access.",
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema12"
+                  }
+                ]
+              },
               "parent": {
                 "anyOf": [
                   {
@@ -722,6 +730,71 @@
       "additionalProperties": {}
     },
     "__schema12": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "matched"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "core",
+                "plugin",
+                "mu-plugin",
+                "theme"
+              ]
+            },
+            "slug": {
+              "$ref": "#/definitions/__schema10"
+            },
+            "evidence": {
+              "type": "string",
+              "const": "block-metadata"
+            },
+            "path": {
+              "description": "block.json path relative to the owner directory; a metadata match, not registration or execution proof.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema10"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "kind",
+            "slug",
+            "evidence",
+            "path"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "unknown"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "metadata_not_found",
+                "ambiguous_metadata",
+                "scan_incomplete"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "__schema13": {
       "type": "object",
       "properties": {
         "available": {
@@ -791,13 +864,13 @@
           "default": [],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema13"
+            "$ref": "#/definitions/__schema14"
           }
         }
       },
       "additionalProperties": {}
     },
-    "__schema13": {
+    "__schema14": {
       "type": "object",
       "properties": {
         "code": {
@@ -840,7 +913,7 @@
         "surface"
       ]
     },
-    "__schema14": {
+    "__schema15": {
       "type": "object",
       "properties": {
         "postTypes": {
@@ -942,7 +1015,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema15": {
+    "__schema16": {
       "type": "object",
       "properties": {
         "items": {
@@ -966,7 +1039,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema16": {
+    "__schema17": {
       "type": "object",
       "properties": {
         "imageSizes": {
@@ -1009,12 +1082,12 @@
       },
       "additionalProperties": {}
     },
-    "__schema17": {
+    "__schema18": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema13"
+        "$ref": "#/definitions/__schema14"
       }
     },
-    "__schema18": {}
+    "__schema19": {}
   }
 }
