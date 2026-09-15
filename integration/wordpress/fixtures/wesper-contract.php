@@ -25,6 +25,10 @@ add_action( 'init', static function (): void {
 		'supports'     => array( 'title', 'revisions' ),
 	) );
 
+	register_taxonomy( 'wesper_topic', array( 'wesper_brief' ), array(
+		'label' => 'Wesper topics', 'public' => false, 'show_in_rest' => true,
+	) );
+
 	wp_register_script( 'wesper-contract-view', false, array(), '1.0.0', true );
 	wp_register_style( 'wesper-contract-style', false, array(), '1.0.0' );
 	register_block_type( 'wesper/contract-child', array(

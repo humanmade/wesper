@@ -84,6 +84,19 @@ assert.ok(brief, 'the synthetic post type must be observed');
 assert.equal(brief.hierarchical, true);
 assert.equal(brief.supports?.title, true);
 assert.equal(brief.supports?.revisions, true);
+assert.deepEqual(brief.owner, {
+  status: 'matched', kind: 'plugin', slug: 'wesper-contract/wesper-contract.php',
+  evidence: 'registration-call', path: 'wesper-contract.php',
+});
+assert.deepEqual(post.owner, {
+  status: 'matched', kind: 'core', slug: 'wordpress',
+  evidence: 'registration-call', path: 'wp-includes/post.php',
+});
+const topic = first.contentModel?.taxonomies?.find((taxonomy) => taxonomy.name === 'wesper_topic');
+assert.ok(topic, 'the registered taxonomy must be observed');
+assert.deepEqual(topic.objectTypes, ['wesper_brief']);
+assert.deepEqual(topic.owner, brief.owner, 'post types and taxonomies use the same package identity');
+
 
 const core = await wpJson(`
   $subtype = get_registered_meta_keys('post', 'post');
