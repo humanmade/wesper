@@ -1,6 +1,6 @@
 {
   "name": "wesper",
-  "version": "0.0.4",
+  "version": "0.4.1",
   "description": "Read a WordPress site's capabilities, presentation system, extensions, content model, authoring environment, and media rules into one provenanced context manifest.",
   "type": "module",
   "license": "GPL-2.0-or-later",

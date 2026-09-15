@@ -8,7 +8,7 @@ Wesper is a read-only dependency that lets a WordPress site describe its capabil
 npm install wesper
 ```
 
-The published npm version is 0.0.4. This checkout also contains unreleased collector changes (`COLLECTOR_VERSION: 0.2.3`), including package attribution and taxonomy records described below. The package version remains 0.0.4 until release; `wesper --version` alone does not identify these changes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
+This guide describes Wesper 0.4.1, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.4.1 adds package attribution, taxonomy records and the collection fixes described below. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
 
 Use it from a library first:
 
@@ -51,7 +51,7 @@ For SSH, WP-CLI must be available to the remote target. `--wp-path` is optional 
 wesper collect --ssh deploy@example.com --wp-path /var/www/site --wp-url https://example.com/blog --out site.context.json
 ```
 
-WP-CLI produces merged theme settings and can collect registered Block Bindings sources and registered post meta. The unreleased collector uses a read-only `--exec` observer during the same WP-CLI process to capture post-type and taxonomy registration callers before its main `eval` payload runs. It installs no site code and changes no registrations.
+WP-CLI produces merged theme settings and can collect registered Block Bindings sources and registered post meta. The collector uses a read-only `--exec` observer during the same WP-CLI process to capture post-type and taxonomy registration callers before its main `eval` payload runs. It installs no site code and changes no registrations.
 
 ### REST
 
@@ -79,7 +79,7 @@ await collect({
 
 REST uses core endpoints only. It lacks binding-source evidence and registered-meta evidence (it reports only core post-data fields), so it cannot currently satisfy strict collection. It also reports theme settings from the core/block/theme layer rather than user customizations, and cannot retrieve some WordPress, plugin, and media evidence through core REST.
 
-The unreleased REST collector also handles subdirectory and query-route installations, with same-origin query fallback when pretty routes are unavailable. It requests post-type edit context when authorized and preserves useful slices when another slice is malformed. Taxonomy definition records and package ownership are currently WP-CLI-only; REST leaves these additions absent.
+The REST collector handles subdirectory and query-route installations, with same-origin query fallback when pretty routes are unavailable. It requests post-type edit context when authorized and preserves useful slices when another slice is malformed. Taxonomy definition records and package ownership are currently WP-CLI-only; REST leaves these additions absent.
 
 `timeoutMs`, `restConcurrency`, `maxResponseBytes`, and `AbortSignal` are available to library callers; corresponding REST CLI flags are available for the numeric limits.
 
@@ -99,7 +99,7 @@ Native theme tokens include stable `id`, kind, slug, value, origin, and `referen
 
 Binding prerequisites are checked independently: the block, supported attribute, source, and exact source-qualified field must each be supported. Compatible field `args` are returned verbatim, never inferred or rewritten. These checks concern manifest compatibility only—not runtime rendering, permissions, post context, or semantic/design choices. They do not diagnose literals or propose replacements; a consumer that adds an opt-in literal suggestion must present its supporting evidence rather than treating every literal as wrong.
 
-### Package attribution and taxonomies (unreleased)
+### Package attribution and taxonomies
 
 The WP-CLI collector adds optional ownership evidence without changing the legacy block `source` classification:
 
@@ -125,7 +125,7 @@ Before writing `metadata.bindings`, consumers join `bindings.supportedAttributes
 
 The field's source must be one of the reported `bindings.sources`; `bindings.available: false` means that binding evidence was explicitly unavailable and cannot coexist with source or attribute evidence.
 
-The unreleased CLI replaces `--out` files atomically after a complete write, preserving the previous file if writing fails. Credential-like values are redacted before serialization and hashing; this does not guarantee detection of arbitrary unlabeled secrets.
+The CLI replaces `--out` files atomically after a complete write, preserving the previous file if writing fails. Credential-like values are redacted before serialization and hashing; this does not guarantee detection of arbitrary unlabeled secrets.
 
 Every manifest records provenance, a canonical `sourceHash`, `provenance.partial`, and warnings. The hash is SHA-256 over the redacted, schema-defaulted, validated document after sorting only order-insensitive collections; it uses JCS canonical JSON. `provenance.collectedAt`, `provenance.sourceHash`, and `provenance.collectionMetrics` are excluded, while content-order arrays such as `theme.settings` are preserved. `validate()` establishes schema validity and defaults, but does not attest the supplied source-hash integrity. Compare `sourceHash(context)` to `context.provenance.sourceHash` when integrity is required.
 

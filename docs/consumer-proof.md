@@ -42,7 +42,7 @@ declarations as `parent`, `ancestor`, `allowedBlocks`, `usesContext`, and
 unavailable through a transport; missing declarations do not establish unrestricted
 placement. Registry declarations alone do not prove editor or front-end behavior.
 
-The unreleased checkout adds separate package attribution and taxonomy records; see [the ownership contract](../README.md#package-attribution-and-taxonomies-unreleased). Block metadata matches and observed registration callers are different evidence. This native-reference fixture comparison does not by itself verify either attribution mechanism.
+Version 0.4.1 adds separate package attribution and taxonomy records; see [the ownership contract](../README.md#package-attribution-and-taxonomies). Block metadata matches and observed registration callers are different evidence. This native-reference fixture comparison does not by itself verify either attribution mechanism.
 
 The fixture's placeholder hash is replaced with a hash of its validated document for this controlled comparison. That is fixture preparation, not a recommendation to overwrite a supplied manifest's hash when checking integrity.
 
@@ -62,13 +62,13 @@ A focused context is a derived view, not a `SiteContext` manifest. The adapter r
 
 For a live site, transport coverage still matters. WP-CLI can report merged user theme settings and registered binding evidence. Core REST collection is partial: it lacks binding-source and registered-meta evidence, excludes user theme customisations and cannot satisfy strict collection. A missing capability in partial evidence remains unknown.
 
-## Unreleased checkout verification
+## 0.4.1 implementation verification
 
 [Commit `ddf9b98` passed CI](https://github.com/humanmade/wesper/actions/runs/34918382064) with 186 tests and package checks on Node 20/24, the native consumer proof on Node 24, and real WordPress 6.5.5/7.1.0 conformance. The integration fixture checks post-type and taxonomy ownership, associations, deterministic hashes and unchanged synthetic content/meta/registrations. Focused PHP tests cover wrappers, themes, single-file MU plugins, symlinked theme roots, replacement registrations, ambiguous callers and truncated traces.
 
-Collector semantics are 0.2.3; these additions are not in the published npm 0.0.4 release. This evidence establishes the tested collector and consumer contracts. Agent time savings, downstream visualization behavior and general browser behavior remain unverified here.
+Version 0.4.1 uses collector semantics 0.2.3 and includes these additions. This evidence establishes the tested collector and consumer contracts. Agent time savings, downstream visualization behavior and general browser behavior remain unverified here.
 
-## Current release verification
+## Historical release verification (0.0.4)
 
 [Wesper 0.0.4 passed CI](https://github.com/humanmade/wesper/actions/runs/34452764511) at commit `bb0466740898ba4b7d837251b497b6073a518232`: 150 unit tests and package checks on Node 20/24, this consumer proof on Node 24, and separate collector conformance on WordPress 6.5.5/7.1.0. The collector fixtures remained unchanged. This establishes package interoperability and synthetic collector conformance, not arbitrary-site rendering or adoption.
 
