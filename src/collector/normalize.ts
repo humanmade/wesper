@@ -11,7 +11,7 @@ import { CONTEXT_VERSION, SCHEMA_URL, CollectionTransportError, type ContextWarn
  * independent of the package and manifest compatibility versions; bump it only
  * when the collector's observed/normalized output semantics change.
  */
-export const COLLECTOR_VERSION = '0.2.1';
+export const COLLECTOR_VERSION = '0.2.2';
 
 export function normalizeCollectorOutput(
   raw: Record<string, unknown>,
@@ -98,6 +98,7 @@ export function normalizeCollectorOutput(
       warnings: sortWarnings(warningArray(bindingsRaw.warnings)),
     };
   }
+  warnForBindingAttributeConsistency(warnings, collected);
   const contentModel = recordWithRecordArray(redactedRaw.contentModel, 'postTypes');
   const completeContentModel = contentModel && hasCompletePostTypes(contentModel.postTypes) ? contentModel : undefined;
   warnIfMalformed(warnings, redactedRaw, 'contentModel', Boolean(completeContentModel));
@@ -278,6 +279,56 @@ function materializeOmittedEvidence(warnings: ContextWarning[], collected: Recor
       message: `The collector omitted ${surface} evidence; the surface is unavailable rather than empty.`,
       coverage: 'unavailable',
     });
+  }
+}
+
+/**
+ * Registry metadata can be extended by WordPress filters, so retain it as
+ * collected while making mismatches with the registered block attributes
+ * visible to consumers.
+ */
+function warnForBindingAttributeConsistency(warnings: ContextWarning[], collected: Record<string, unknown>): void {
+  const blocks = recordOrUndefined(collected.blocks);
+  const bindings = recordOrUndefined(collected.bindings);
+  if (!blocks) return;
+
+  const blocksByName = new Map<string, { attributes: Record<string, unknown>; providesContext?: Record<string, unknown> }>();
+  for (const block of array(blocks.types)) {
+    const attributes = recordOrUndefined(block.attributes);
+    if (typeof block.name === 'string' && attributes) {
+      blocksByName.set(block.name, { attributes, providesContext: recordOrUndefined(block.providesContext) });
+    }
+  }
+  const supportedAttributes = bindings && recordOrUndefined(bindings.supportedAttributes);
+  if (supportedAttributes) {
+    for (const [blockName, supported] of Object.entries(supportedAttributes)) {
+      const block = blocksByName.get(blockName);
+      if (!block || !Array.isArray(supported)) continue;
+      for (const attribute of supported) {
+        if (typeof attribute !== 'string' || hasOwn(block.attributes ?? {}, attribute)) continue;
+        warnings.push({
+          code: 'bindings.supported_attribute_missing',
+          severity: 'warning',
+          surface: `bindings.supportedAttributes.${blockName}.${attribute}`,
+          message: `Binding support reports "${attribute}" for "${blockName}", but the registered block attributes do not include it.`,
+          coverage: 'partial',
+        });
+      }
+    }
+  }
+
+  for (const [blockName, block] of blocksByName.entries()) {
+    if (!block.providesContext) continue;
+    for (const [context, attribute] of Object.entries(block.providesContext)) {
+      if (typeof attribute !== 'string' || hasOwn(block.attributes ?? {}, attribute)) continue;
+      warnings.push({
+        code: 'blocks.provides_context_attribute_missing',
+        severity: 'warning',
+        surface: `blocks.types.${blockName}.providesContext.${context}`,
+        message: `Block "${blockName}" provides context "${context}" from "${attribute}", but the registered block attributes do not include it.`,
+        coverage: 'partial',
+      });
+    }
   }
 }
 
