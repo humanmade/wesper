@@ -171,6 +171,29 @@ export const blockTypeSchema = z
   })
   .catchall(jsonValueSchema);
 
+const registrationOwnerSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('matched'),
+    kind: z.enum(['core', 'plugin', 'mu-plugin', 'theme']),
+    slug: identifierSchema,
+    evidence: z.literal('registration-call'),
+    path: identifierSchema.describe('Registration file path relative to the owner directory; identifies an observed registration caller, not rendering or complete behavior proof.'),
+  }),
+  z.object({ status: z.literal('unknown'), reason: z.enum(['registration_not_observed', 'unmapped_registration', 'ambiguous_registration', 'incomplete_registration_trace']) }),
+]);
+
+const taxonomySchema = z
+  .object({
+    name: identifierSchema,
+    label: z.string().optional(),
+    public: z.boolean().optional(),
+    showInRest: z.boolean().optional(),
+    hierarchical: z.boolean().optional(),
+    objectTypes: z.array(identifierSchema),
+    owner: registrationOwnerSchema.optional(),
+  })
+  .passthrough();
+
 export const imageSizeSchema = z
   .object({
     name: identifierSchema,
@@ -272,10 +295,12 @@ export const siteContextSchema = z
                 supports: z.record(z.string(), jsonValueSchema).optional(),
                 taxonomies: z.array(identifierSchema).default([]),
                 fields: z.array(bindingFieldSchema).default([]),
+                owner: registrationOwnerSchema.optional(),
               })
               .passthrough(),
           )
           .default([]),
+        taxonomies: z.array(taxonomySchema).optional(),
       })
       .passthrough()
       .optional(),
@@ -310,6 +335,7 @@ type RelationshipManifest = {
       name: string;
       fields: Array<{ name: string; key?: string; source: string; args: Record<string, unknown>; bindable: boolean }>;
     }>;
+    taxonomies?: Array<{ name: string }>;
   };
   patterns?: { items: Array<{ name: string }> };
   media?: { imageSizes: Array<{ name: string }> };
@@ -329,6 +355,7 @@ function validateManifestRelationships(value: RelationshipManifest, ctx: z.Refin
   uniqueIdentifiers(ctx, value.patterns?.items, 'name', ['patterns', 'items'], 'pattern name');
   uniqueIdentifiers(ctx, value.media?.imageSizes, 'name', ['media', 'imageSizes'], 'image-size name');
   uniqueIdentifiers(ctx, value.contentModel?.postTypes, 'name', ['contentModel', 'postTypes'], 'post-type name');
+  uniqueIdentifiers(ctx, value.contentModel?.taxonomies, 'name', ['contentModel', 'taxonomies'], 'taxonomy name');
 
   for (const [postTypeIndex, postType] of value.contentModel?.postTypes.entries() ?? []) {
     const fieldPath = ['contentModel', 'postTypes', postTypeIndex, 'fields'] as const;

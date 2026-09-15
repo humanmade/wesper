@@ -16,7 +16,7 @@ export async function collectWpCli(options: CollectOptions): Promise<SiteContext
   }
 
   const wpBinary = options.wpBinary ?? 'wp';
-  const args = wpArgs(options, ['eval', PHP_COLLECTOR]);
+  const args = wpArgs(options, [`--exec=${PHP_REGISTRATION_OBSERVER}`, 'eval', PHP_COLLECTOR]);
   const control = collectionControl(options);
   let stdout: string;
   try {
@@ -77,6 +77,38 @@ function parseCollectorJson(stdout: string): Record<string, unknown> {
 export function collectorSourceForTests(): string {
   return PHP_COLLECTOR;
 }
+
+export function registrationObserverForTests(): string {
+  return PHP_REGISTRATION_OBSERVER;
+}
+
+// WP-CLI executes --exec before loading WordPress. Preinitialized hooks observe
+// registration without installing site code or changing the registered values.
+const PHP_REGISTRATION_OBSERVER = String.raw`
+$GLOBALS['wesper_registration_files'] = array();
+foreach (array('post_type', 'taxonomy') as $kind) {
+    $observer = function($name) use ($kind) {
+        $files = array();
+        $registration = false;
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 64);
+        if (count($trace) === 64) {
+            $GLOBALS['wesper_registration_files'][$kind][$name] = false;
+            return;
+        }
+        foreach ($trace as $frame) {
+            if (isset($frame['function']) && $frame['function'] === 'register_' . $kind) $registration = true;
+            if ($registration && isset($frame['file']) && strpos($frame['file'], 'phar://') !== 0) $files[] = $frame['file'];
+        }
+        // The latest registration replaces any prior definition of this name.
+        $GLOBALS['wesper_registration_files'][$kind][$name] = array_values(array_unique($files));
+    };
+    if (function_exists('add_action')) {
+        add_action('registered_' . $kind, $observer, PHP_INT_MAX, 1);
+    } else {
+        $GLOBALS['wp_filter']['registered_' . $kind][PHP_INT_MAX][] = array('function' => $observer, 'accepted_args' => 1);
+    }
+}
+`;
 
 const PHP_COLLECTOR = String.raw`
 $warnings = array();
@@ -328,6 +360,47 @@ if ($bindings_available) {
 }
 $supported_attributes = wesper_json_map($supported_attributes);
 
+// Resolve observed callers against the same package identities used by blocks.
+// Shared libraries can wrap registration. Match the package in the call chain,
+// leaving chains involving multiple known packages explicitly ambiguous.
+function wesper_registration_owner($kind, $name, $roots) {
+    $files = isset($GLOBALS['wesper_registration_files'][$kind][$name]) ? $GLOBALS['wesper_registration_files'][$kind][$name] : array();
+    if ($files === false) return array('status' => 'unknown', 'reason' => 'incomplete_registration_trace');
+    if (!$files) return array('status' => 'unknown', 'reason' => 'registration_not_observed');
+    $matches = array();
+    foreach ($files as $file) {
+        $file = realpath($file);
+        if (!$file) continue;
+        foreach ($roots as $root) {
+            if ($root['kind'] === 'core') continue;
+            $root['directory'] = realpath($root['directory']);
+            if (!$root['directory']) continue;
+            if (isset($root['entry']) ? $file !== $root['entry'] : strpos($file, $root['directory'] . DIRECTORY_SEPARATOR) !== 0) continue;
+            $identity = $root['kind'] . ':' . $root['slug'];
+            if (!isset($matches[$identity])) $matches[$identity] = array('status' => 'matched', 'kind' => $root['kind'], 'slug' => $root['slug'], 'evidence' => 'registration-call', 'path' => str_replace(DIRECTORY_SEPARATOR, '/', substr($file, strlen($root['directory']) + 1)));
+        }
+    }
+    if (count($matches) > 1) return array('status' => 'unknown', 'reason' => 'ambiguous_registration');
+    if ($matches) return reset($matches);
+    $first = realpath($files[0]);
+    $core = realpath(ABSPATH);
+    // Only a direct core call is core evidence; an unmapped external caller
+    // must not become core merely because WordPress appears later in its stack.
+    if ($core && $first && (strpos($first, $core . DIRECTORY_SEPARATOR . 'wp-includes' . DIRECTORY_SEPARATOR) === 0 || strpos($first, $core . DIRECTORY_SEPARATOR . 'wp-admin' . DIRECTORY_SEPARATOR) === 0)) {
+        return array('status' => 'matched', 'kind' => 'core', 'slug' => 'wordpress', 'evidence' => 'registration-call', 'path' => str_replace(DIRECTORY_SEPARATOR, '/', substr($first, strlen($core) + 1)));
+    }
+    return array('status' => 'unknown', 'reason' => 'unmapped_registration');
+}
+$registration_roots = $owner_roots;
+// Single-file plugins do not have a private metadata directory, but a direct
+// registration in their entry file is sufficient evidence.
+foreach ($plugins as $plugin) {
+    if (strpos($plugin['slug'], '/') !== false) continue;
+    $base = $plugin['kind'] === 'mu-plugin' ? WPMU_PLUGIN_DIR : WP_PLUGIN_DIR;
+    $entry = realpath($base . '/' . $plugin['slug']);
+    if ($entry) $registration_roots[] = array('directory' => dirname($entry), 'entry' => $entry, 'kind' => $plugin['kind'], 'slug' => $plugin['slug']);
+}
+
 $post_types = array();
 foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_object) {
     $rest_visible_meta_count = 0;
@@ -380,6 +453,7 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
     }
     $post_types[] = array(
         'name' => $post_type_name,
+        'owner' => wesper_registration_owner('post_type', $post_type_name, $registration_roots),
         'label' => $post_type_object->label,
         'public' => (bool) $post_type_object->public,
         'showInRest' => (bool) $post_type_object->show_in_rest,
@@ -387,6 +461,19 @@ foreach (get_post_types(array(), 'objects') as $post_type_name => $post_type_obj
         'supports' => wesper_json_map(function_exists('get_all_post_type_supports') ? get_all_post_type_supports($post_type_name) : array()),
         'taxonomies' => array_values(get_object_taxonomies($post_type_name)),
         'fields' => $fields,
+    );
+}
+
+$taxonomies = array();
+foreach (function_exists('get_taxonomies') ? get_taxonomies(array(), 'objects') : array() as $name => $taxonomy) {
+    $taxonomies[] = array(
+        'name' => $name,
+        'label' => $taxonomy->label,
+        'public' => (bool) $taxonomy->public,
+        'showInRest' => !empty($taxonomy->show_in_rest),
+        'hierarchical' => !empty($taxonomy->hierarchical),
+        'objectTypes' => array_values((array) $taxonomy->object_type),
+        'owner' => wesper_registration_owner('taxonomy', $name, $registration_roots),
     );
 }
 
@@ -433,7 +520,7 @@ $output = array(
         'supportedAttributes' => $supported_attributes,
         'warnings' => array(),
     ),
-    'contentModel' => array('postTypes' => $post_types),
+    'contentModel' => array('postTypes' => $post_types, 'taxonomies' => $taxonomies),
     'media' => array(
         'imageSizes' => function_exists('wp_get_registered_image_subsizes') ? array_values(array_map(function($name, $size) {
             return array(

@@ -34,13 +34,13 @@
       "$ref": "#/definitions/__schema15"
     },
     "patterns": {
-      "$ref": "#/definitions/__schema16"
-    },
-    "media": {
       "$ref": "#/definitions/__schema17"
     },
-    "warnings": {
+    "media": {
       "$ref": "#/definitions/__schema18"
+    },
+    "warnings": {
+      "$ref": "#/definitions/__schema19"
     }
   },
   "required": [
@@ -50,7 +50,7 @@
     "warnings"
   ],
   "additionalProperties": {
-    "$ref": "#/definitions/__schema19"
+    "$ref": "#/definitions/__schema20"
   },
   "definitions": {
     "__schema0": {
@@ -1004,10 +1004,58 @@
                     "$ref": "#/definitions/__schema8"
                   }
                 }
+              },
+              "owner": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema16"
+                  }
+                ]
               }
             },
             "required": [
               "name"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "taxonomies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/__schema10"
+              },
+              "label": {
+                "type": "string"
+              },
+              "public": {
+                "type": "boolean"
+              },
+              "showInRest": {
+                "type": "boolean"
+              },
+              "hierarchical": {
+                "type": "boolean"
+              },
+              "objectTypes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/__schema10"
+                }
+              },
+              "owner": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema16"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "objectTypes"
             ],
             "additionalProperties": {}
           }
@@ -1016,6 +1064,72 @@
       "additionalProperties": {}
     },
     "__schema16": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "matched"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "core",
+                "plugin",
+                "mu-plugin",
+                "theme"
+              ]
+            },
+            "slug": {
+              "$ref": "#/definitions/__schema10"
+            },
+            "evidence": {
+              "type": "string",
+              "const": "registration-call"
+            },
+            "path": {
+              "description": "Registration file path relative to the owner directory; identifies an observed registration caller, not rendering or complete behavior proof.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema10"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "kind",
+            "slug",
+            "evidence",
+            "path"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "unknown"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "registration_not_observed",
+                "unmapped_registration",
+                "ambiguous_registration",
+                "incomplete_registration_trace"
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "__schema17": {
       "type": "object",
       "properties": {
         "items": {
@@ -1039,7 +1153,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema17": {
+    "__schema18": {
       "type": "object",
       "properties": {
         "imageSizes": {
@@ -1082,12 +1196,12 @@
       },
       "additionalProperties": {}
     },
-    "__schema18": {
+    "__schema19": {
       "type": "array",
       "items": {
         "$ref": "#/definitions/__schema14"
       }
     },
-    "__schema19": {}
+    "__schema20": {}
   }
 }

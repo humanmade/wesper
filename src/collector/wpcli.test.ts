@@ -1,9 +1,9 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { collectorSourceForTests } from './wpcli.js';
+import { collectorSourceForTests, registrationObserverForTests } from './wpcli.js';
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
 import { collect, sourceHash, stringifyManifest, validate } from '../index.js';
 import { coverageFor, strictCoverageGaps } from '../warnings.js';
@@ -91,6 +91,63 @@ describe('block metadata ownership', () => {
   });
 });
 
+describe('content registration ownership across site layouts', () => {
+  it('observes wrappers, themes, single-file MU plugins, replacements and unknown callers', () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), 'wesper-registration-')));
+    try {
+      for (const name of ['plugin', 'replacement', 'theme', 'mu', 'shared', 'wordpress/wp-includes']) mkdirSync(join(directory, name), { recursive: true });
+      writeFileSync(join(directory, 'shared/wrapper.php'), '<?php function wrapped_registration($name) { register_post_type($name); }');
+      writeFileSync(join(directory, 'plugin/register.php'), "<?php register_post_type('plain'); wrapped_registration('wrapped'); register_taxonomy('topic'); register_post_type('replace');");
+      writeFileSync(join(directory, 'replacement/register.php'), "<?php register_post_type('replace');");
+      writeFileSync(join(directory, 'theme/functions.php'), "<?php register_post_type('landing');");
+      writeFileSync(join(directory, 'mu/single.php'), "<?php register_post_type('single');");
+      writeFileSync(join(directory, 'shared/unknown.php'), "<?php register_post_type('unmapped');");
+      writeFileSync(join(directory, 'wordpress/wp-includes/post.php'), "<?php register_post_type('post');");
+      symlinkSync(join(directory, 'theme'), join(directory, 'theme-link'), 'dir');
+      const roots = [
+        { directory: join(directory, 'plugin'), kind: 'plugin', slug: 'plugin/plugin.php' },
+        { directory: join(directory, 'replacement'), kind: 'plugin', slug: 'replacement/plugin.php' },
+        { directory: join(directory, 'theme-link'), kind: 'theme', slug: 'example-theme' },
+        { directory: join(directory, 'mu'), entry: join(directory, 'mu/single.php'), kind: 'mu-plugin', slug: 'single.php' },
+      ];
+      const source = collectorSourceForTests();
+      const helper = source.slice(source.indexOf('function wesper_registration_owner('), source.indexOf('$registration_roots = $owner_roots;'));
+      const output = JSON.parse(execFileSync('php', ['-r', `
+        ${registrationObserverForTests()}
+        function register_post_type($name) { foreach ($GLOBALS['wp_filter']['registered_post_type'][PHP_INT_MAX] as $hook) call_user_func($hook['function'], $name); }
+        function register_taxonomy($name) { foreach ($GLOBALS['wp_filter']['registered_taxonomy'][PHP_INT_MAX] as $hook) call_user_func($hook['function'], $name); }
+        $base = getenv('WESPER_REGISTRATION_BASE');
+        define('ABSPATH', $base . '/wordpress/');
+        foreach (array('shared/wrapper.php', 'plugin/register.php', 'replacement/register.php', 'theme/functions.php', 'mu/single.php', 'shared/unknown.php', 'wordpress/wp-includes/post.php') as $file) require $base . '/' . $file;
+        ${helper}
+        function deep_registration($depth) { if ($depth) deep_registration($depth - 1); else register_post_type('deep'); }
+        deep_registration(80);
+        $roots = json_decode(getenv('WESPER_REGISTRATION_ROOTS'), true);
+        $output = array();
+        foreach (array('plain', 'wrapped', 'replace', 'landing', 'single', 'unmapped', 'post', 'unobserved', 'deep') as $name) $output[$name] = wesper_registration_owner('post_type', $name, $roots);
+        $output['topic'] = wesper_registration_owner('taxonomy', 'topic', $roots);
+        $library_roots = $roots; $library_roots[] = array('directory' => $base . '/shared', 'kind' => 'plugin', 'slug' => 'framework/framework.php');
+        $output['sharedPlugin'] = wesper_registration_owner('post_type', 'wrapped', $library_roots);
+        $duplicate = $roots[0]; $duplicate['slug'] = 'other/plugin.php'; $roots[] = $duplicate;
+        $output['ambiguous'] = wesper_registration_owner('post_type', 'plain', $roots);
+        echo json_encode($output);
+      `], { encoding: 'utf8', env: { ...process.env, WESPER_REGISTRATION_BASE: directory, WESPER_REGISTRATION_ROOTS: JSON.stringify(roots) } }));
+      for (const name of ['plain', 'wrapped', 'topic']) expect(output[name]).toEqual({ status: 'matched', kind: 'plugin', slug: 'plugin/plugin.php', evidence: 'registration-call', path: 'register.php' });
+      expect(output.replace.slug).toBe('replacement/plugin.php');
+      expect(output.landing).toMatchObject({ kind: 'theme', slug: 'example-theme', path: 'functions.php' });
+      expect(output.single).toMatchObject({ kind: 'mu-plugin', slug: 'single.php', path: 'single.php' });
+      expect(output.post).toMatchObject({ kind: 'core', slug: 'wordpress', path: 'wp-includes/post.php' });
+      expect(output.deep).toEqual({ status: 'unknown', reason: 'incomplete_registration_trace' });
+      expect(output.unmapped).toEqual({ status: 'unknown', reason: 'unmapped_registration' });
+      expect(output.unobserved).toEqual({ status: 'unknown', reason: 'registration_not_observed' });
+      expect(output.sharedPlugin).toEqual({ status: 'unknown', reason: 'ambiguous_registration' });
+      expect(output.ambiguous).toEqual({ status: 'unknown', reason: 'ambiguous_registration' });
+    } finally {
+      trashFixture(directory);
+    }
+  });
+});
+
 describe('WP-CLI collector', () => {
   afterEach(() => {
     mockedOutput = wpOutput();
@@ -113,7 +170,7 @@ describe('WP-CLI collector', () => {
     expect(execFile).toHaveBeenCalledTimes(1);
     expect(execFile).toHaveBeenCalledWith(
       'wp',
-      expect.arrayContaining(['--ssh=example', '--path=/tmp/wp', '--url=https://example.test', 'eval']),
+      expect.arrayContaining(['--ssh=example', '--path=/tmp/wp', '--url=https://example.test', `--exec=${registrationObserverForTests()}`, 'eval']),
       expect.objectContaining({ encoding: 'utf8' }),
       expect.any(Function),
     );

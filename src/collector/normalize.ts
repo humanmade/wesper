@@ -11,7 +11,7 @@ import { CONTEXT_VERSION, SCHEMA_URL, CollectionTransportError, type ContextWarn
  * independent of the package and manifest compatibility versions; bump it only
  * when the collector's observed/normalized output semantics change.
  */
-export const COLLECTOR_VERSION = '0.2.2';
+export const COLLECTOR_VERSION = '0.2.3';
 
 export function normalizeCollectorOutput(
   raw: Record<string, unknown>,
@@ -103,8 +103,19 @@ export function normalizeCollectorOutput(
   const completeContentModel = contentModel && hasCompletePostTypes(contentModel.postTypes) ? contentModel : undefined;
   warnIfMalformed(warnings, redactedRaw, 'contentModel', Boolean(completeContentModel));
   if (completeContentModel) {
+    const validTaxonomies = !hasOwn(completeContentModel, 'taxonomies') || taxonomyArray(completeContentModel.taxonomies);
+    if (!validTaxonomies) {
+      warnings.push({
+        code: 'contentModel.taxonomies.invalid_evidence',
+        severity: 'warning',
+        surface: 'contentModel.taxonomies',
+        message: 'The collector returned incomplete contentModel.taxonomies evidence; the taxonomy slice was omitted rather than normalized as empty.',
+        coverage: 'partial',
+      });
+    }
     collected.contentModel = {
       postTypes: sortPostTypes(array(completeContentModel.postTypes)),
+      ...(validTaxonomies && hasOwn(completeContentModel, 'taxonomies') ? { taxonomies: sortTaxonomies(array(completeContentModel.taxonomies)) } : {}),
     };
   }
   const patterns = recordWithRecordArray(redactedRaw.patterns, 'items');
@@ -216,6 +227,19 @@ function hasCompletePostTypes(value: unknown): boolean {
   return Array.isArray(value) && value.every((postType) => {
     const record = recordOrUndefined(postType);
     return record && recordArray(record.fields);
+  });
+}
+
+function taxonomyArray(value: unknown): value is Array<Record<string, unknown>> {
+  return Array.isArray(value) && value.every((taxonomy) => {
+    const record = recordOrUndefined(taxonomy);
+    return Boolean(
+      record &&
+        typeof record.name === 'string' &&
+        record.name.length > 0 &&
+        Array.isArray(record.objectTypes) &&
+        record.objectTypes.every((item) => typeof item === 'string'),
+    );
   });
 }
 
@@ -397,6 +421,13 @@ function sortPostTypes(items: Array<Record<string, unknown>>): Array<Record<stri
     supports: emptyArrayMap(postType.supports),
     fields: sortByName(array(postType.fields)),
     taxonomies: sortStrings(postType.taxonomies),
+  }));
+}
+
+function sortTaxonomies(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return sortByName(items).map((taxonomy) => ({
+    ...taxonomy,
+    objectTypes: sortStrings(taxonomy.objectTypes),
   }));
 }
 
