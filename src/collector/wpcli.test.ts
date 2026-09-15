@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdtempSync, mkdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectorSourceForTests } from './wpcli.js';
 import { COLLECTOR_VERSION, normalizeCollectorOutput } from './normalize.js';
@@ -29,6 +29,17 @@ vi.mock('node:child_process', async (importOriginal) => {
   };
 });
 
+function trashFixture(directory: string): void {
+  try {
+    execFileSync('trash', [directory]);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const destination = join(homedir(), '.Trash');
+    mkdirSync(destination, { recursive: true });
+    renameSync(directory, join(destination, basename(directory)));
+  }
+}
+
 describe('block metadata ownership', () => {
   it('discovers included nested MU packages without listing inactive files', () => {
     const directory = realpathSync(mkdtempSync(join(tmpdir(), 'wesper-mu-')));
@@ -42,7 +53,7 @@ describe('block metadata ownership', () => {
       const output = runEmbeddedCollector({ muRoot: directory, includedFiles: [active], pluginData: { [active]: { Name: 'Active' }, [inactive]: { Name: 'Inactive' } } });
       expect(output.plugins).toEqual([{ slug: 'active/plugin.php', name: 'Active', version: '', active: true, kind: 'mu-plugin' }]);
     } finally {
-      execFileSync('trash', [directory]);
+      trashFixture(directory);
     }
   });
 
@@ -75,7 +86,7 @@ describe('block metadata ownership', () => {
       expect(incomplete[1]).toBe(false);
       expect(warnings[0].code).toBe('blocks.owner_scan_incomplete');
     } finally {
-      execFileSync('trash', [directory]);
+      trashFixture(directory);
     }
   });
 });
