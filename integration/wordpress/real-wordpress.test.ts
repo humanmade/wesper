@@ -110,7 +110,18 @@ assert.ok(first.bindings?.sources.some((source) => source.name === 'wesper/contr
 assert.equal(first.bindings?.sources.some((source) => source.name === 'core/post-data'), core.sources.includes('core/post-data'));
 assert.equal(post.fields.some((field) => field.source === 'core/post-data'), core.sources.includes('core/post-data'), 'an absent source produces no invented fields');
 assert.ok(first.patterns?.items.some((pattern) => pattern.name === 'wesper-contract/registered-pattern'));
-assert.ok(coverageFor(first, ['blocks', 'contentModel', 'patterns']).every((entry) => entry.status === 'complete'));
+assert.ok(coverageFor(first, ['contentModel', 'patterns']).every((entry) => entry.status === 'complete'));
+// Core also contains context mappings whose attributes are absent from its
+// registry. Preserve those facts and require the corresponding evidence gaps.
+const missingContextSurfaces = first.blocks!.types.flatMap((block) =>
+  Object.entries(block.providesContext ?? {})
+    .filter(([, attribute]) => !Object.hasOwn(block.attributes, attribute))
+    .map(([context]) => `blocks.types.${block.name}.providesContext.${context}`),
+).sort();
+const blockWarnings = first.warnings.filter((warning) => warning.surface === 'blocks' || warning.surface.startsWith('blocks.'));
+assert.ok(blockWarnings.every((warning) => warning.code === 'blocks.provides_context_attribute_missing'), 'no block collection or ownership scan failures');
+assert.deepEqual(blockWarnings.map((warning) => warning.surface).sort(), missingContextSurfaces);
+assert.equal(coverageFor(first, ['blocks'])[0].status, missingContextSurfaces.length ? 'partial' : 'complete');
 
 // Authenticated and anonymous REST calls establish permitted and denied core
 // surfaces. Their overlap is compared only where REST and WP-CLI are intended
