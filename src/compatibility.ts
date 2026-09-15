@@ -108,9 +108,7 @@ export function checkBindingReference(context: SiteContext, reference: BindingRe
   reasons.push(membershipReason(hasSource, 'binding_source', `bindings.sources.${reference.source}`, sources));
 
   const nestedSource = (reference.field as FieldReference).source;
-  const fieldReference: FieldReference = reference.field.key !== undefined
-    ? { ...reference.field, source: reference.source }
-    : { ...reference.field, source: reference.source };
+  const fieldReference: FieldReference = { ...reference.field, source: reference.source };
   const field = lookupField(context, fieldReference);
   const fieldIdentity = fieldEvidencePath(reference);
   if (nestedSource !== undefined && nestedSource !== reference.source) {

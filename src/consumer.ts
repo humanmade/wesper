@@ -81,8 +81,12 @@ export interface FocusedContext {
 /** Look up an emitted native WordPress preset without reimplementing its reference syntax. */
 export function lookupNativeToken(context: SiteContext, reference: NativeTokenReference): LookupResult<ThemeToken> {
   const evidence = nativeTokenCoverage(context);
-  const value = nativeTokens(context).find((token) => token.kind === reference.kind && token.slug === reference.slug);
-  return lookupResult(context, evidence, value);
+  const matches = nativeTokens(context).filter((token) => token.kind === reference.kind && token.slug === reference.slug);
+  if (matches.length > 1) {
+    return { status: 'unknown', coverage: 'partial', sourceManifestHash: context.provenance.sourceHash,
+      warnings: [...evidence.warnings, { code: 'token.ambiguous', surface: 'theme.tokens', severity: 'warning', coverage: 'partial', message: 'Multiple native presets report this token identity.' }] };
+  }
+  return lookupResult(context, evidence, matches[0]);
 }
 
 /** Look up a registered block type. */

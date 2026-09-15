@@ -15,6 +15,17 @@ import {
 const HASH = 'sha256:0000000000000000000000000000000000000000000000000000000000000000';
 
 describe('consumer helpers', () => {
+  it('reports duplicate token identities as unknown in either input order', () => {
+    const raw = rawFixture();
+    raw.theme.tokens.presets.push({ ...raw.theme.tokens.presets[0], value: '#0000ff' });
+    for (let order = 0; order < 2; order += 1) {
+      const result = lookupNativeToken(parse(raw), { kind: 'color', slug: 'primary' });
+      expect(result).toMatchObject({ status: 'unknown', coverage: 'partial', warnings: [{ code: 'token.ambiguous' }] });
+      expect(result).not.toHaveProperty('value');
+      raw.theme.tokens.presets.reverse();
+    }
+  });
+
   it('resolves exact native references for every token kind and verbatim field args', () => {
     const context = validContext();
     const expected = [
