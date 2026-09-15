@@ -1,37 +1,79 @@
 # Wesper
 
-Wesper is a read-only dependency that lets a WordPress site describe its capabilities once. It produces a portable, provenanced context manifest for authoring tools, migration and integration agents, diagnostics, editorial tooling, and other WordPress consumers.
+Wesper reads a WordPress site's configuration and registered capabilities and saves them as JSON. Other tools can use that file to inspect blocks, plugins, fields and theme settings. Wesper does not change the site or call AI models.
 
-`site.context.json` is organized around WordPress facts rather than any one consumer. Its current domains cover site and platform identity, the presentation system, active extensions, the content model, authoring capabilities, media rules, and evidence coverage. Block Runner is one consumer of that contract; its commands and generation modes do not define Wesper's schema.
+The output, `site.context.json`, records what was collected and where information is missing. A tool or agent can use it without reconnecting to WordPress. Block Runner is one consumer; Wesper also supports migration, editorial and diagnostic tools.
+
+## Try it without WordPress
+
+Use Node.js 20 or later. From an empty directory:
 
 ```sh
+npm init -y
 npm install wesper
+npx wesper summarize node_modules/wesper/examples/fixtures/consumer-manifest.json
 ```
 
-This guide describes Wesper 0.4.1, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.4.1 adds package attribution, taxonomy records and the collection fixes described below. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
+This reads the synthetic fixture shipped with Wesper. It needs no WordPress installation, credentials or AI model. The output includes:
 
-Use it from a library first:
+```text
+- Collector: fixture
 
-```ts
-import { collect, lookupNativeToken, summarize, validate } from 'wesper';
+## Counts
 
-const collected = await collect({ collector: 'wp-cli', wpPath: './public' });
-const checked = validate(collected);
-if (!checked.ok || !checked.context) throw new Error('Invalid manifest');
-console.log(summarize(checked.context));
-
-const primary = lookupNativeToken(checked.context, { kind: 'color', slug: 'primary' });
-if (primary.status === 'found') console.log(primary.value.references.blockStyle);
+- Block types: 2
+- Binding sources: 2
+- Post types: 2
+- Bindable fields: 4
+- Patterns: 0
+- Plugins: 0
 ```
 
-Or install the CLI globally:
+This is an excerpt from sample data, not an inventory of your site. Its placeholder source hash does not assert integrity.
+
+## Collect your site
+
+For local collection, you need a working WordPress installation and WP-CLI (`wp`) on your `PATH`. Replace `./public` with the directory containing that installation:
+
+```sh
+npx wesper collect --wp-path ./public --out site.context.json
+npx wesper summarize site.context.json
+```
+
+The first command reads WordPress and writes the JSON file. The second reads that saved file offline. Collection can return partial results; inspect the warnings and [coverage guidance](#native-references-and-coverage).
+
+For a remote site, use [WP-CLI over SSH](#wp-cli) or the [core REST API](#rest). REST needs a reachable site URL; a WordPress username and Application Password give access to additional endpoints. Anonymous collection is supported but partial.
+
+To use `wesper` without the `npx` prefix in the collector examples below, install the CLI globally:
 
 ```sh
 npm install --global wesper
-wesper collect --wp-path ./public --out site.context.json
-wesper validate site.context.json
-wesper summarize site.context.json
 ```
+
+## Use the library
+
+Save this as `collect-site.mjs` and run `node collect-site.mjs`. It has the same WordPress and WP-CLI prerequisites as local CLI collection:
+
+```js
+import { collect, summarize } from 'wesper';
+
+const context = await collect({ collector: 'wp-cli', wpPath: './public' });
+console.log(summarize(context));
+```
+
+`collect()` returns a normalised, validated manifest. To read saved JSON instead, validate it at the input boundary. Save this as `read-context.mjs` and run `node read-context.mjs site.context.json`:
+
+```js
+import { readFile } from 'node:fs/promises';
+import { summarize, validate } from 'wesper';
+
+const input = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const checked = validate(input);
+if (!checked.ok || !checked.context) throw new Error('Invalid manifest');
+console.log(summarize(checked.context));
+```
+
+You can also pass `node_modules/wesper/examples/fixtures/consumer-manifest.json` to this script. Validation checks the manifest contract and redacts credential-like values. It does not prove completeness, freshness or rendering behaviour, or verify the supplied source hash. See [the evidence and hashing rules](#binding-join).
 
 ## Collectors
 
@@ -167,6 +209,8 @@ Run `npm run example:consumer-proof` from a checkout to build and install the ca
 The comparison uses synthetic fixtures and the published `block-runner@0.8.0` package. It records emitted native references, retained intentional literals, validity and context size. See [the reproducible setup and its limits](https://github.com/humanmade/wesper/blob/main/docs/consumer-proof.md). The proof runner is repository tooling; Block Runner is not a Wesper runtime dependency.
 
 ## Versions and contribution
+
+This guide describes Wesper 0.4.1, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.4.1 adds package attribution, taxonomy records and collection fixes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
 
 Wesper requires Node.js 20 or later, builds for Node 20, and CI checks Node 20 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
 
