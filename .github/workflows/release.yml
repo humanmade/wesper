@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   publish:
+    if: github.event_name != 'release' || github.event.release.prerelease == false
     name: Publish to npm
     runs-on: ubuntu-latest
 
