@@ -9,6 +9,8 @@ npm run verify
 
 `npm run verify` covers type checking, unit tests, the build, and installed-package checks. Consumer proof and Docker-based WordPress checks run separately.
 
+For the collection flow, source-file map and a worked field-change walkthrough, read [How Wesper works](docs/architecture.md).
+
 Version sources are deliberately separate:
 
 - `package.json` is the package version, used by `wesper --version`; it is not necessarily the version currently published to npm.

@@ -214,6 +214,8 @@ This guide describes Wesper 0.4.1, with collector semantics 0.2.3 and manifest `
 
 Wesper requires Node.js 20 or later, builds for Node 20, and CI checks Node 20 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
 
+For the collection flow, source-file map and a worked field-change walkthrough, read [How Wesper works](https://github.com/humanmade/wesper/blob/main/docs/architecture.md).
+
 The package version in `package.json` drives `wesper --version`. `COLLECTOR_VERSION` is separately versioned for shared WP-CLI/REST collection semantics and changes only when those semantics change. `contextVersion: 1` is the manifest compatibility version.
 
 MCP, Abilities, ACF, diff/freshness, and WordPress mutations are outside the current delivery scope.
