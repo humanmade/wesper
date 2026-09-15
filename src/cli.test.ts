@@ -24,6 +24,45 @@ describe('CLI', () => {
     expect(version.stdout.trim()).toBe(packageVersion);
   });
 
+  it('reports invalid numeric options instead of failing silently', () => {
+    for (const flag of ['--timeout-ms', '--rest-concurrency', '--max-response-bytes']) {
+      const result = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'collect', flag, '0'], { encoding: 'utf8' });
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('Expected a positive integer');
+    }
+  });
+
+  it('preserves the previous manifest on a partial write failure and replaces it on success', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'wesper-atomic-'));
+    const out = path.join(dir, 'site.context.json');
+    const wp = path.join(dir, 'wp');
+    await writeFile(wp, `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(partialCollectorOutput())}'\n`, { mode: 0o755 });
+    const preload = path.join(dir, 'fail-write.mjs');
+    await writeFile(preload, `import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+const write = fs.writeFile;
+fs.writeFile = async (file, ...args) => {
+  if (String(file).includes('.wesper-') || String(file) === process.env.WESPER_TEST_OUT) {
+    await write(file, 'incomplete', { mode: 0o600 });
+    throw Object.assign(new Error('Injected full disk'), { code: 'ENOSPC' });
+  }
+  return write(file, ...args);
+};
+syncBuiltinESMExports();
+`);
+    const original = '{"previous":"manifest"}\n';
+    await writeFile(out, original);
+    const args = ['--import', 'tsx', 'src/cli.ts', 'collect', '--wp-path', '/tmp/wp', '--out', out];
+    const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, WESPER_TEST_OUT: out };
+    const failed = spawnSync(process.execPath, ['--import', preload, ...args], { encoding: 'utf8', env });
+    expect(failed.status).toBe(3);
+    expect(failed.stderr).toContain('Injected full disk');
+    expect(await readFile(out, 'utf8')).toBe(original);
+    const success = spawnSync(process.execPath, args, { encoding: 'utf8', env });
+    expect(success.status).toBe(0);
+    expect(JSON.parse(await readFile(out, 'utf8'))).toMatchObject({ contextVersion: 1 });
+  });
+
   it('rejects unsupported formats', async () => {
     const manifestPath = await writeFixture();
     const result = spawnSync(

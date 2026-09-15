@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
+import { promisify } from 'node:util';
 import { Command } from 'commander';
 import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate } from './index.js';
 import { sanitizeErrorMessage } from './collector/safe.js';
@@ -147,6 +152,7 @@ for (const command of program.commands) {
 try {
   await program.parseAsync();
 } catch (error) {
+  if (!errorCode(error)?.startsWith('commander.')) console.error(`wesper: ${message(error)}`);
   process.exitCode = isCommanderSuccess(error) ? EXIT.success : EXIT.usageOrInput;
 }
 
@@ -157,7 +163,23 @@ async function readJson(path: string): Promise<unknown> {
 async function writeOutput(output: string, out?: string): Promise<void> {
   const text = output.endsWith('\n') ? output : `${output}\n`;
   if (out) {
-    await writeFile(out, text);
+    const temporary = join(dirname(out), `.wesper-${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, text, { flag: 'wx', mode: 0o600 });
+      await rename(temporary, out);
+    } catch (error) {
+      // Preserve the existing manifest and recoverably discard our incomplete write.
+      try {
+        await promisify(execFile)('trash', [temporary]);
+      } catch (cleanupError) {
+        if (errorCode(cleanupError) === 'ENOENT') {
+          const trash = join(homedir(), '.Trash');
+          await mkdir(trash, { recursive: true });
+          await rename(temporary, join(trash, basename(temporary))).catch(() => undefined);
+        }
+      }
+      throw error;
+    }
     return;
   }
   process.stdout.write(text);
