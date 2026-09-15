@@ -41,7 +41,7 @@ import { ZodError } from 'zod/v4';
 import { collectRest } from './collector/rest.js';
 import { collectWpCli } from './collector/wpcli.js';
 import { hasOwn, recordArray, recordOrUndefined, recordWithRecordArray, stringArrayMap } from './evidence.js';
-import { RedactionError, redactSecrets } from './redact.js';
+import { RedactionError, redactManifest } from './redact.js';
 import { siteContextSchema } from './schema.js';
 import { allWarnings, coverageFor, declaredWarningsFor, strictCoverageGaps, type CollectionSurface, type CoverageStatus } from './warnings.js';
 import {
@@ -50,6 +50,7 @@ import {
   StrictCollectionError,
   UsageError,
   type CollectOptions,
+  type ContextWarning,
   type SiteContext,
   type ValidationIssue,
   type ValidationResult,
@@ -81,8 +82,11 @@ export async function collect(options: CollectOptions): Promise<SiteContext> {
  */
 export function validate(manifest: unknown): ValidationResult {
   let redacted: unknown;
+  let redactionWarnings: ContextWarning[];
   try {
-    redacted = redactSecrets(manifest);
+    const filtered = redactManifest(manifest);
+    redacted = filtered.value;
+    redactionWarnings = filtered.warnings;
   } catch (error) {
     if (error instanceof RedactionError) {
       return {
@@ -102,7 +106,14 @@ export function validate(manifest: unknown): ValidationResult {
     };
   }
 
-  const context = preserveEvidence(result.data, redacted);
+  const data = result.data;
+  for (const warning of redactionWarnings) {
+    if (!data.warnings.some((existing) => existing.code === warning.code && existing.surface === warning.surface)) {
+      data.warnings.push(warning);
+    }
+  }
+  if (redactionWarnings.length) data.provenance.partial = true;
+  const context = preserveEvidence(data, redacted);
 
   return {
     ok: true,

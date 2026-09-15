@@ -9,6 +9,29 @@ import {
 } from './redact.js';
 
 describe('redactSecrets', () => {
+  it('filters named credentials in URLs and ordinary string values idempotently', () => {
+    const input = { url: 'https://example.test/?api%4Bey=synthetic-secret&view=edit',
+      diagnostic: 'Authorization: Basic synthetic-auth', note: 'apiKey=synthetic-key',
+      ordinary: 'The token has a name', other: 'color=blue', authHeader: 'Bearer synthetic-auth-header', grouped: 'WP_API_PASSWORD=abcd efgh ijkl mnop qrst uvwx', query: 'https://example.test/?appPassword=synthetic-query&view=edit' };
+    const result = redactSecrets(input);
+    expect(JSON.stringify(result)).not.toContain('synthetic-');
+    expect(result.url).toContain('&view=edit');
+    expect(result.query).toContain('&view=edit');
+    for (const group of ['abcd', 'efgh', 'ijkl', 'mnop', 'qrst', 'uvwx']) expect(result.grouped).not.toContain(group);
+    expect(result.ordinary).toBe(input.ordinary);
+    expect(result.other).toBe(input.other);
+    expect(redactSecrets(result)).toEqual(result);
+  });
+
+  it('rejects non-JSON object prototypes instead of hashing them as empty records', () => {
+    class Example { value = 1; }
+    for (const value of [new Date(0), new Map(), new Set(), new Uint8Array([1]), new Example()]) {
+      expect(() => redactSecrets(value)).toThrow(RedactionError);
+      expect(() => sourceHash(value)).toThrow(RedactionError);
+    }
+    expect(redactSecrets(Object.assign(Object.create(null), { value: 1 }))).toEqual({ value: 1 });
+  });
+
   it('sanitises URL userinfo without changing ordinary schema and design-token metadata', () => {
     const applicationPassword = 'synthetic-app-password-123';
     const authorizationValue = 'SyntheticAuthorizationValue';
@@ -26,7 +49,7 @@ describe('redactSecrets', () => {
     expect(result.theme).toEqual({
       tokens: { colors: [{ slug: 'brand', name: 'Brand', value: '#1357ff' }] },
     });
-    expect(result.url).toBe('https://%5BREDACTED%5D@example.test/wp-json/?authorization=SyntheticAuthorizationValue');
+    expect(result.url).toBe('https://%5BREDACTED%5D@example.test/wp-json/?authorization=%5BREDACTED%5D');
     expect(JSON.stringify(result)).not.toContain(applicationPassword);
     expect(JSON.stringify(result)).not.toContain('site-user');
   });

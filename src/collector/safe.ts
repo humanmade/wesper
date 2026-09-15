@@ -6,13 +6,13 @@ const REDACTED_URL = '[REDACTED_URL]';
 // enough to justify risking a password embedded in an unusual URL encoding.
 const URL_WITH_USERINFO = /(?:(?:\b[a-z][a-z\d+.-]*:)?\/\/)[^\s/?#@]+@[^\s'"`<>\])},]*/gi;
 const URL_WITH_USERINFO_TEST = /(?:(?:\b[a-z][a-z\d+.-]*:)?\/\/)[^\s/?#@]+@[^\s'"`<>\])},]*/i;
-const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization)\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,}\]]+)/gi;
+const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization)\b(?:"|')?\s*[:=]\s*(?:\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,}\]]+)/gi;
 // WordPress displays Application Passwords in space-separated groups. Handle
 // those labels before generic passwords so all groups are removed together.
-const LABELLED_APP_PASSWORD = /(?<!-)\b((?:wp[_-]?api[_-]?password|wp[_-]?app[_-]?password|application[-_ ]?password|app[-_ ]?password))\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+(?:[ \t]+[^\s,;}\]]+)*)/gi;
-const LABELLED_SECRET = /(?<!-)\b((?:password|passwd|passphrase))\b(?:"|')?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
-const COMMAND_APP_PASSWORD = /(^|\s)((?:--(?:app[-_]?password|application[-_]?password)))(?:=|\s+)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+(?:[ \t]+[^\s,;}\]]+)*)/gi;
-const COMMAND_CREDENTIAL = /(^|\s)((?:-u|--?(?:user|password|passwd|pwd)))(?:=|\s+)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
+const LABELLED_APP_PASSWORD = /(?<!-)\b((?:wp[_-]?api[_-]?password|wp[_-]?app[_-]?password|application[-_ ]?password|app[-_ ]?password))\b(?:"|')?\s*[:=]\s*(?:\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+(?:[ \t]+[^\s,;}\]]+)*)/gi;
+const LABELLED_SECRET = /(?<!-)\b((?:password|passwd|passphrase))\b(?:"|')?\s*[:=]\s*(?:\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
+const COMMAND_APP_PASSWORD = /(^|\s)((?:--(?:app[-_]?password|application[-_]?password)))(?:=|\s+)(?:\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+(?:[ \t]+[^\s,;}\]]+)*)/gi;
+const COMMAND_CREDENTIAL = /(^|\s)((?:-u|--?(?:user|password|passwd|pwd)))(?:=|\s+)(?:\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,}\]]+)/gi;
 
 /**
  * Makes a diagnostic safe to write to stderr. This is deliberately limited to

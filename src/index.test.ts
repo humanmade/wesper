@@ -12,6 +12,25 @@ import { collect, formatSummaryMarkdown, stringifyManifest, summarize, validate,
 const fixtureCollector: CollectOptions = { collector: 'fixture' };
 
 describe('validation', () => {
+  it('marks redacted registry evidence partial through collection and validation round trips', () => {
+    const raw = fixture({ blocks: { types: [{ name: 'test/collision', source: 'plugin',
+      attributes: { token: { type: 'string' }, title: { type: 'string' } }, supports: {} }] } });
+    for (const context of [validate(raw).context!, normalizeCollectorOutput(raw, { collector: 'wp-cli', collectorVersion: 'test' })]) {
+      expect(context.blocks?.types[0]?.attributes.token).toBe('[REDACTED]');
+      expect(context.blocks?.types[0]?.attributes.title).toEqual({ type: 'string' });
+      expect(context.provenance.partial).toBe(true);
+      expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'manifest.redacted_evidence', surface: 'blocks', coverage: 'partial' }));
+      const again = validate(JSON.parse(stringifyManifest(context))).context!;
+      expect(again.warnings).toEqual(context.warnings);
+    }
+  });
+
+  it('rejects non-JSON extensions and never serializes named string credentials', () => {
+    expect(validate(fixture({ extension: new Date(0) }))).toMatchObject({ ok: false, errors: [{ code: 'redaction.failed' }] });
+    const raw = fixture({ diagnostic: 'Authorization: Basic synthetic-auth', site: { url: 'https://example.test/?token=synthetic-token' } });
+    expect(stringifyManifest(raw as SiteContext)).not.toContain('synthetic-');
+  });
+
   it('rejects fixture collection from untyped JavaScript callers while validating fixture provenance', async () => {
     await expect(collect({ collector: 'fixture' as never })).rejects.toMatchObject({
       code: 'WESPER_USAGE',

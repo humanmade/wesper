@@ -1,3 +1,4 @@
+import type { ContextWarning } from './types.js';
 import { sanitizeErrorMessage } from './collector/safe.js';
 
 // Whole-word credential tokens. A key is redacted if any of its tokens matches —
@@ -69,7 +70,7 @@ export class RedactionError extends Error {
 }
 
 /**
- * Return a copy with credential-like keys and URL userinfo redacted.
+ * Return a copy with credential-like keys, URL credentials, and named credential text redacted.
  *
  * The traversal is deliberately bounded (see `RedactionError`) so malformed
  * untrusted input has a deterministic failure path instead of exhausting the
@@ -83,7 +84,19 @@ export function redactSecrets<T>(value: T): T {
   return redact(value, { active: new WeakSet<object>(), nodes: 0 }, 0) as T;
 }
 
+/** Internal manifest boundary: retain evidence that filtering removed data. */
+export function redactManifest<T>(value: T): { value: T; warnings: ContextWarning[] } {
+  const surfaces = new Set<string>();
+  const redacted = redact(value, { active: new WeakSet<object>(), nodes: 0, surfaces }, 0) as T;
+  return { value: redacted, warnings: [...surfaces].sort().map((surface) => ({
+    code: 'manifest.redacted_evidence', severity: 'warning', surface, coverage: 'partial',
+    message: 'Credential-like data was redacted; this surface is incomplete.',
+  })) };
+}
+
 interface RedactionState {
+  surfaces?: Set<string>;
+  surface?: string;
   active: WeakSet<object>;
   nodes: number;
 }
@@ -97,12 +110,15 @@ function isSecretKey(key: string): boolean {
   if (tokens.some((token) => SECRET_WORDS.has(token))) {
     return true;
   }
-  return tokens.includes('key') && tokens.some((token) => KEY_QUALIFIERS.has(token));
+  return (tokens.includes('auth') && tokens.includes('header')) ||
+    (tokens.includes('key') && tokens.some((token) => KEY_QUALIFIERS.has(token)));
 }
 
 function redact(value: unknown, state: RedactionState, depth: number): unknown {
   if (typeof value === 'string') {
-    return redactUrlUserinfo(value);
+    const result = redactCredentialText(redactUrlUserinfo(value));
+    if (result !== value) state.surfaces?.add(state.surface ?? 'manifest');
+    return result;
   }
 
   if (!value || typeof value !== 'object') {
@@ -160,6 +176,12 @@ function arrayLength(value: unknown[]): number {
 }
 
 function redactObject(value: object, state: RedactionState, depth: number): Record<string, unknown> {
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) throw new RedactionError('unsafe_input');
+  } catch {
+    throw new RedactionError('unsafe_input');
+  }
   const keys = ownEnumerableKeys(value);
   consumeNodes(state, keys.length);
 
@@ -168,9 +190,12 @@ function redactObject(value: object, state: RedactionState, depth: number): Reco
   // the result's prototype while it is being redacted.
   const result: Record<string, unknown> = {};
   for (const key of keys) {
-    const redactedValue = isSecretKey(key)
-      ? REDACTED
-      : redactObjectValue(key, value, state, depth);
+    const previousSurface = state.surface;
+    if (depth === 0) state.surface = key;
+    const secret = isSecretKey(key);
+    if (secret) state.surfaces?.add(state.surface ?? 'manifest');
+    const redactedValue = secret ? REDACTED : redactDataProperty(value, key, state, depth);
+    state.surface = previousSurface;
     Object.defineProperty(result, key, {
       configurable: true,
       enumerable: true,
@@ -179,13 +204,6 @@ function redactObject(value: object, state: RedactionState, depth: number): Reco
     });
   }
   return result;
-}
-
-function redactObjectValue(key: string, value: object, state: RedactionState, depth: number): unknown {
-  const redactedValue = redactDataProperty(value, key, state, depth);
-  // Collector warnings use the non-secret `message` key. Treat that text as a
-  // diagnostic so credentials embedded in it cannot cross a package boundary.
-  return key === 'message' && typeof redactedValue === 'string' ? sanitizeErrorMessage(redactedValue) : redactedValue;
 }
 
 function redactDataProperty(value: object, key: string, state: RedactionState, depth: number): unknown {
@@ -199,7 +217,9 @@ function redactDataProperty(value: object, key: string, state: RedactionState, d
   if (key === 'toJSON' && typeof descriptor.value === 'function') {
     throw new RedactionError('unsafe_input');
   }
-  return redact(descriptor.value, state, depth + 1);
+  const input = key === 'message' && typeof descriptor.value === 'string' ? sanitizeErrorMessage(descriptor.value) : descriptor.value;
+  if (input !== descriptor.value) state.surfaces?.add(state.surface ?? 'manifest');
+  return redact(input, state, depth + 1);
 }
 
 function ownEnumerableKeys(value: object): string[] {
@@ -238,6 +258,20 @@ function redactUrlUserinfo(value: string): string {
   // valid. A malformed URL can still contain an application password, and must
   // not survive into a manifest or diagnostic unchanged.
   return value.replace(URL_USERINFO, `$1${ENCODED_REDACTED}@`);
+}
+
+function redactCredentialText(value: string): string {
+  return value
+    .replace(/(^|[\s,{])((?:wp[_-]?api[_-]?password|wp[_-]?app[_-]?password|application[-_ ]?password|app[-_ ]?password))\s*[:=]\s*(?:\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+(?:[ \t]+[^\s,;}\]]+)*)/gi, '$1$2: [REDACTED]')
+    .replace(/([?&])([^=&#\s]+)=([^&#\s]*)/g, (match, separator: string, key: string) => {
+      let decoded: string;
+      try { decoded = decodeURIComponent(key); } catch { return match; }
+      return isSecretKey(decoded) ? `${separator}${key}=${ENCODED_REDACTED}` : match;
+    })
+    .replace(/(^|[\s,{])((?:proxy-)?authorization)\s*[:=]\s*(?:Basic|Bearer)\s+[^\s,;}\]]+/gi, '$1$2: [REDACTED]')
+    .replace(/(^|[\s,{])([\w-]+)(\s*[:=]\s*)(\[REDACTED\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/g,
+      (match, prefix: string, key: string, separator: string, secret: string) =>
+        isSecretKey(key) && secret !== REDACTED ? `${prefix}${key}${separator}${REDACTED}` : match);
 }
 
 function redactionErrorMessage(code: RedactionErrorCode): string {

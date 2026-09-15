@@ -91,21 +91,6 @@ function wesper_warning($code, $surface, $message, $severity = 'warning', $cover
     );
 }
 
-function wesper_public_props($object, $props) {
-    $out = array();
-    foreach ($props as $from => $to) {
-        if (is_int($from)) {
-            $from = $to;
-        }
-        if (is_object($object) && isset($object->{$from})) {
-            $out[$to] = $object->{$from};
-        } elseif (is_array($object) && array_key_exists($from, $object)) {
-            $out[$to] = $object[$from];
-        }
-    }
-    return $out;
-}
-
 // PHP serializes an empty array as JSON [], but these collector surfaces are
 // JSON object maps even when WordPress reports no entries.
 function wesper_json_map($value) {
@@ -383,7 +368,6 @@ $output = array(
         'warnings' => array(),
     ),
     'contentModel' => array('postTypes' => $post_types),
-    'patterns' => array('items' => $patterns),
     'media' => array(
         'imageSizes' => function_exists('wp_get_registered_image_subsizes') ? array_values(array_map(function($name, $size) {
             return array(
@@ -397,6 +381,12 @@ $output = array(
     ),
     'warnings' => $warnings,
 );
+
+if (class_exists('WP_Block_Patterns_Registry')) {
+    $output['patterns'] = array('items' => $patterns);
+} else {
+    $output['warnings'][] = wesper_warning('patterns.unavailable', 'patterns', 'The block pattern registry is unavailable.', 'warning', 'unavailable');
+}
 
 echo wp_json_encode($output);
 `;

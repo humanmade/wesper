@@ -1,17 +1,17 @@
 import { canonicalize, sourceHash } from '../canonical.js';
 import { hasOwn, recordArray, recordOrUndefined, recordWithRecordArray, stringArrayMap } from '../evidence.js';
-import { redactSecrets } from '../redact.js';
+import { redactManifest, redactSecrets } from '../redact.js';
 import { siteContextSchema } from '../schema.js';
 import { parseThemeJsonSettings, themeWarnings } from '../theme.js';
 import { coverageFor } from '../warnings.js';
-import { CONTEXT_VERSION, SCHEMA_URL, type ContextWarning, type SiteContext } from '../types.js';
+import { CONTEXT_VERSION, SCHEMA_URL, CollectionTransportError, type ContextWarning, type SiteContext } from '../types.js';
 
 /**
  * Revision of the shared WP-CLI/REST collection semantics. This is deliberately
  * independent of the package and manifest compatibility versions; bump it only
  * when the collector's observed/normalized output semantics change.
  */
-export const COLLECTOR_VERSION = '0.2.0';
+export const COLLECTOR_VERSION = '0.2.1';
 
 export function normalizeCollectorOutput(
   raw: Record<string, unknown>,
@@ -19,8 +19,12 @@ export function normalizeCollectorOutput(
 ): SiteContext {
   // Redact before deriving either hash. This also makes every subsequent
   // normalization step operate on the exact content we may return.
-  const redactedRaw = record(withoutUndefined(redactSecrets(raw)));
+  const filtered = redactManifest(raw);
+  const redactedRaw = record(withoutUndefined(filtered.value));
   const warnings = warningArray(redactedRaw.warnings);
+  for (const warning of filtered.warnings) {
+    if (!warnings.some((existing) => existing.code === warning.code && existing.surface === warning.surface)) warnings.push(warning);
+  }
   const themeRaw = themeSection(redactedRaw);
   if (themeRaw) warnings.push(...themeWarnings(themeRaw.settings));
 
@@ -395,7 +399,11 @@ function sortByFields(items: Array<Record<string, unknown>>, fields: string[]): 
 }
 
 function sortStrings(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String).sort(compareStrings) : [];
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new CollectionTransportError('Collector returned a malformed identifier list.', 'malformed_response');
+  }
+  return [...value].sort(compareStrings);
 }
 
 function compareStrings(left: string, right: string): number {

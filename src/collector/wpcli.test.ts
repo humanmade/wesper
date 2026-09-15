@@ -263,6 +263,22 @@ describe('WP-CLI collector', () => {
     );
   });
 
+  it('rejects malformed identifier-list members instead of coercing them to strings', () => {
+    for (const categories of [[null], [42], [{}]]) {
+      expect(() => normalizeCollectorOutput({ site: {}, patterns: { items: [{ name: 'test/pattern', categories }] } },
+        { collector: 'wp-cli', collectorVersion: 'test' })).toThrow('malformed identifier list');
+    }
+  });
+
+  it('preserves unavailable versus successfully empty PHP pattern registries', () => {
+    const unavailable = runEmbeddedCollector({});
+    expect(unavailable.patterns).toBeUndefined();
+    expect(unavailable.warnings).toContainEqual(expect.objectContaining({ code: 'patterns.unavailable', coverage: 'unavailable' }));
+    const empty = runEmbeddedCollector({ patternsApi: true });
+    expect(empty.patterns).toEqual({ items: [] });
+    expect(warningCodes(empty)).not.toContain('patterns.unavailable');
+  });
+
   it('normalizes only explicit PHP empty-array dictionary transport values', () => {
     const context = normalizeCollectorOutput(
       {
@@ -367,7 +383,7 @@ describe('WP-CLI collector', () => {
       vi.fn((input: string | URL) => {
         const url = String(input);
         let body: unknown;
-        if (url.endsWith('/wp-json/')) {
+        if (new URL(url).pathname.endsWith('/wp-json/')) {
           body = { name: 'Example' };
         } else if (url.includes('/wp/v2/themes')) {
           body = [];
@@ -386,7 +402,7 @@ describe('WP-CLI collector', () => {
         } else {
           return Promise.reject(new Error(`unexpected fetch: ${url}`));
         }
-        return Promise.resolve({ ok: true, json: async () => body } as Response);
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
       }),
     );
 
@@ -763,6 +779,7 @@ describe('WP-CLI collector', () => {
 function runEmbeddedCollector(options: Record<string, unknown>): any {
   const config = {
     version: '6.8',
+    patternsApi: false,
     bindingsApi: true,
     metaApi: true,
     attributeApi: false,
@@ -801,6 +818,7 @@ function is_protected_meta($key) { if (in_array($key, cfg('unprotected', array()
 function get_bloginfo($key) { return $key === 'url' ? 'https://example.test' : 'Example'; }
 function get_locale() { return 'en_US'; }
 function wp_json_encode($value) { return json_encode($value); }
+${config.patternsApi === true ? 'class WP_Block_Patterns_Registry { static function get_instance() { return new self; } function get_all_registered() { return array(); } }' : ''}
 ${bindingsApi}
 ${metaApi}
 ${attributeApi}
