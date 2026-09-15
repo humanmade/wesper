@@ -36,9 +36,13 @@ The V1 block `source` field is a legacy namespace classification, not ownership
 provenance: `core` means a `core/*` block name and `plugin` means any other block
 name. A `plugin` value must not be used to infer that the implementation belongs
 to a plugin; it may be supplied by a theme, MU plugin, shared package, or another
-source. Likewise, composition fields that V1 does not collect—such as parent,
-ancestor, allowed-child, or context declarations—must not be interpreted as
-evidence that placement is unrestricted.
+source. Since 0.0.4, collectors report overlapping block relationships and context
+declarations as `parent`, `ancestor`, `allowedBlocks`, `usesContext`, and
+`providesContext`. These optional fields may be absent in older manifests or
+unavailable through a transport; missing declarations do not establish unrestricted
+placement. Registry declarations alone do not prove editor or front-end behavior.
+
+The unreleased checkout adds separate package attribution and taxonomy records; see [the ownership contract](../README.md#package-attribution-and-taxonomies-unreleased). Block metadata matches and observed registration callers are different evidence. This native-reference fixture comparison does not by itself verify either attribution mechanism.
 
 The fixture's placeholder hash is replaced with a hash of its validated document for this controlled comparison. That is fixture preparation, not a recommendation to overwrite a supplied manifest's hash when checking integrity.
 
@@ -46,7 +50,7 @@ The fixture's placeholder hash is replaced with a hash of its validated document
 
 The adapter reads the collected preset registry instead of issuing WordPress discovery requests or parsing `theme.settings` again. The independent consumer uses reported references and field arguments instead of reconstructing preset strings or guessing source-specific argument keys.
 
-No discovery code is deleted from Block Runner by this example. Its existing `--context` resolver reads `theme.settings`; it is not the entry point used here. The explicit public configuration adapter demonstrates consumption of Wesper's native preset list without claiming the built-in resolver has been migrated.
+No discovery code is deleted from Block Runner by this example. The pinned Block Runner 0.8.0 `--context` resolver reads `theme.settings`; it is not the entry point used here. The explicit public configuration adapter demonstrates consumption of Wesper's native preset list without claiming the built-in resolver has been migrated.
 
 ## Interpretation and limits
 
@@ -58,7 +62,17 @@ A focused context is a derived view, not a `SiteContext` manifest. The adapter r
 
 For a live site, transport coverage still matters. WP-CLI can report merged user theme settings and registered binding evidence. Core REST collection is partial: it lacks binding-source and registered-meta evidence, excludes user theme customisations and cannot satisfy strict collection. A missing capability in partial evidence remains unknown.
 
-## Recorded result
+## Unreleased checkout verification
+
+[Commit `ddf9b98` passed CI](https://github.com/humanmade/wesper/actions/runs/34918382064) with 186 tests and package checks on Node 20/24, the native consumer proof on Node 24, and real WordPress 6.5.5/7.1.0 conformance. The integration fixture checks post-type and taxonomy ownership, associations, deterministic hashes and unchanged synthetic content/meta/registrations. Focused PHP tests cover wrappers, themes, single-file MU plugins, symlinked theme roots, replacement registrations, ambiguous callers and truncated traces.
+
+Collector semantics are 0.2.3; these additions are not in the published npm 0.0.4 release. This evidence establishes the tested collector and consumer contracts. Agent time savings, downstream visualization behavior and general browser behavior remain unverified here.
+
+## Current release verification
+
+[Wesper 0.0.4 passed CI](https://github.com/humanmade/wesper/actions/runs/34452764511) at commit `bb0466740898ba4b7d837251b497b6073a518232`: 150 unit tests and package checks on Node 20/24, this consumer proof on Node 24, and separate collector conformance on WordPress 6.5.5/7.1.0. The collector fixtures remained unchanged. This establishes package interoperability and synthetic collector conformance, not arbitrary-site rendering or adoption.
+
+## Historical recorded result (0.0.3)
 
 A local run on 6 September 2026 used the Wesper 0.0.3 candidate, Node 24.18.0 and published Block Runner 0.8.0:
 

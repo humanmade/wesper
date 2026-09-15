@@ -8,7 +8,7 @@ Wesper is a read-only dependency that lets a WordPress site describe its capabil
 npm install wesper
 ```
 
-The native-reference helpers below require Wesper 0.0.3 or later.
+The published npm version is 0.0.4. This checkout also contains unreleased collector changes (`COLLECTOR_VERSION: 0.2.3`), including package attribution and taxonomy records described below. The package version remains 0.0.4 until release; `wesper --version` alone does not identify these changes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
 
 Use it from a library first:
 
@@ -51,7 +51,7 @@ For SSH, WP-CLI must be available to the remote target. `--wp-path` is optional 
 wesper collect --ssh deploy@example.com --wp-path /var/www/site --wp-url https://example.com/blog --out site.context.json
 ```
 
-WP-CLI produces merged theme settings and can collect registered Block Bindings sources and registered post meta.
+WP-CLI produces merged theme settings and can collect registered Block Bindings sources and registered post meta. The unreleased collector uses a read-only `--exec` observer during the same WP-CLI process to capture post-type and taxonomy registration callers before its main `eval` payload runs. It installs no site code and changes no registrations.
 
 ### REST
 
@@ -79,11 +79,13 @@ await collect({
 
 REST uses core endpoints only. It lacks binding-source evidence and registered-meta evidence (it reports only core post-data fields), so it cannot currently satisfy strict collection. It also reports theme settings from the core/block/theme layer rather than user customizations, and cannot retrieve some WordPress, plugin, and media evidence through core REST.
 
+The unreleased REST collector also handles subdirectory and query-route installations, with same-origin query fallback when pretty routes are unavailable. It requests post-type edit context when authorized and preserves useful slices when another slice is malformed. Taxonomy definition records and package ownership are currently WP-CLI-only; REST leaves these additions absent.
+
 `timeoutMs`, `restConcurrency`, `maxResponseBytes`, and `AbortSignal` are available to library callers; corresponding REST CLI flags are available for the numeric limits.
 
 ## Native references and coverage
 
-WP-CLI collection also reports must-use plugins, post-type hierarchy and supports, and registered block relationships, context, styles, asset handles, and WordPress's dynamic-render status. These are runtime registry facts. They do not identify repository ownership, reconstruct build paths, inspect editor `save()` implementations, imply that a dynamic block saves no child content, or prove front-end behavior. REST reports the overlapping core block-type fields.
+WP-CLI collection also reports must-use plugins, post-type hierarchy and supports, and registered block relationships, context, styles, asset handles, and WordPress's dynamic-render status. These are runtime registry facts. They do not reconstruct build paths, inspect editor `save()` implementations, imply that a dynamic block saves no child content, or prove front-end behavior. Optional attribution evidence is described separately below. REST reports the overlapping core block-type fields.
 
 Native theme tokens include stable `id`, kind, slug, value, origin, and `references`: `cssCustomProperty`, `cssValue`, and `blockStyle`. For example, a colour token can produce `var:preset|color|primary` directly for a block style value. Wesper does not infer semantic roles from token names. Native-token coverage is distinct from theme-settings coverage: `theme.tokens.presets: []` proves an empty native registry, while settings-only and legacy token collections do not.
 
@@ -97,11 +99,33 @@ Native theme tokens include stable `id`, kind, slug, value, origin, and `referen
 
 Binding prerequisites are checked independently: the block, supported attribute, source, and exact source-qualified field must each be supported. Compatible field `args` are returned verbatim, never inferred or rewritten. These checks concern manifest compatibility only—not runtime rendering, permissions, post context, or semantic/design choices. They do not diagnose literals or propose replacements; a consumer that adds an opt-in literal suggestion must present its supporting evidence rather than treating every literal as wrong.
 
+### Package attribution and taxonomies (unreleased)
+
+The WP-CLI collector adds optional ownership evidence without changing the legacy block `source` classification:
+
+| Field | Evidence | Meaning |
+| --- | --- | --- |
+| `blocks.types[].owner` | `block-metadata` | A registered block name matches a package's `block.json`; this identifies a package candidate, not the registration call. |
+| `contentModel.postTypes[].owner` | `registration-call` | The observed registration call chain maps to one known package, or directly to core. |
+| `contentModel.taxonomies[].owner` | `registration-call` | The same registration evidence for a taxonomy. |
+
+A matched owner contains `status: "matched"`, `kind` (`core`, `plugin`, `mu-plugin`, or `theme`), `slug`, `evidence` and a `path` relative to its package directory. Plugin and MU-plugin slugs join to `plugins[].slug`; theme slugs refer to the stylesheet/template, and core uses `wordpress`. For core, block metadata paths are relative to `wp-includes/blocks`, while registration paths are relative to the WordPress installation. Unknown owners contain `status: "unknown"` and a `reason`, without a guessed slug. Older manifests and REST output can omit ownership entirely.
+
+Taxonomy records contain `name`, label/visibility/hierarchy metadata, `objectTypes` associations and optional ownership. The existing `postTypes[].taxonomies` name lists remain intact. A missing taxonomy section is not an empty registry.
+
+Nested MU packages enter the inventory only when PHP included a file with a plugin header. Block metadata scanning covers known package, theme and core directories, excluding `node_modules`, `vendor` and `.git`; it does not follow internal directory symlinks. Scans are bounded to 20,000 file entries and 1 MiB per metadata file. Incomplete scans leave block owners unknown. Registration traces exclude arguments, stay in process memory, and are limited to 64 frames; truncated traces and chains spanning multiple known packages remain unknown. Registrations outside known package roots, including some Composer dependencies, remain unmapped.
+
+An isolated package means no relationships were captured for it. Ownership does not describe every later filter, prove safe removal, or establish a package's complete footprint. Pattern `blockTypes` entries are associations, including template areas such as `core/template-part/header`; they are not an inventory of blocks used inside pattern content.
+
+The shared normalizer warns when supported binding attributes or `providesContext` mappings lack corresponding block attribute definitions. It preserves the reported registrations. These gaps make the affected evidence partial, but do not establish a runtime failure; a compatibility result can remain `compatible` with warnings. Consumers should inspect those warnings and perform the runtime check their task requires.
+
 ### Binding join
 
 Before writing `metadata.bindings`, consumers join `bindings.supportedAttributes` (the bindable attributes reported for each block type) with `contentModel.postTypes[].fields` (the fields reported for the target post type). Each field carries ready-to-use `args`; copy them verbatim. In particular, do not invent `field` for `core/post-data` or `key` for `core/post-meta`—Wesper owns that source-specific syntax.
 
 The field's source must be one of the reported `bindings.sources`; `bindings.available: false` means that binding evidence was explicitly unavailable and cannot coexist with source or attribute evidence.
+
+The unreleased CLI replaces `--out` files atomically after a complete write, preserving the previous file if writing fails. Credential-like values are redacted before serialization and hashing; this does not guarantee detection of arbitrary unlabeled secrets.
 
 Every manifest records provenance, a canonical `sourceHash`, `provenance.partial`, and warnings. The hash is SHA-256 over the redacted, schema-defaulted, validated document after sorting only order-insensitive collections; it uses JCS canonical JSON. `provenance.collectedAt`, `provenance.sourceHash`, and `provenance.collectionMetrics` are excluded, while content-order arrays such as `theme.settings` are preserved. `validate()` establishes schema validity and defaults, but does not attest the supplied source-hash integrity. Compare `sourceHash(context)` to `context.provenance.sourceHash` when integrity is required.
 
