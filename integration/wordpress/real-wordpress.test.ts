@@ -132,6 +132,22 @@ assert.ok(permitted.blocks?.types.length, 'authenticated REST exposes block type
 const permittedContractBlock = permitted.blocks?.types.find((block) => block.name === 'wesper/contract-child');
 assert.ok(permittedContractBlock, 'authenticated REST exposes the synthetic block');
 assert.equal(permittedContractBlock.render?.isDynamic, true, 'REST reports WordPress core dynamic-render evidence');
+const coreTypes = await restJson('/wp-json/wp/v2/types?context=edit');
+const permittedBrief = permitted.contentModel?.postTypes.find((type) => type.name === 'wesper_brief');
+assert.deepEqual(permittedBrief?.supports, coreTypes.wesper_brief.supports, 'authenticated type supports match edit-context core evidence');
+assert.equal(permittedBrief?.public, undefined, 'REST viewability is not raw WordPress public registration');
+assert.equal(denied.contentModel?.postTypes.find((type) => type.name === 'wesper_brief')?.supports, undefined, 'anonymous view context does not invent support flags');
+const queryRoute = await collect({ collector: 'rest', wpUrl: `${url}/?rest_route=/`, wpUser: user, wpAppPassword: password });
+assert.deepEqual(queryRoute.blocks, permitted.blocks, 'explicit query-route collection matches pretty routes');
+const permalinkStructure = await wpJson('echo wp_json_encode(get_option("permalink_structure"));');
+try {
+  await execFile(wp, ['--path=/var/www/html', 'rewrite', 'structure', '', '--hard']);
+  const plain = await collect({ collector: 'rest', wpUrl: url, wpUser: user, wpAppPassword: password });
+  assert.deepEqual(plain.blocks, permitted.blocks, 'plain-permalink collection preserves the core block registry');
+  assert.deepEqual(plain.contentModel, permitted.contentModel, 'plain-permalink collection preserves edit-context types');
+} finally {
+  await execFile(wp, ['--path=/var/www/html', 'rewrite', 'structure', permalinkStructure, '--hard']);
+}
 const anonymousTheme = await anonymousRequest('/wp-json/wp/v2/themes?status=active');
 assert.ok([401, 403].includes(anonymousTheme.status), 'anonymous core theme access is explicitly denied');
 const deniedThemeCoverage = coverageFor(denied, ['theme'])[0]!;

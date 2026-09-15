@@ -10,12 +10,19 @@ interface FetchStub {
 }
 
 function jsonResponse(body: unknown, ok = true, status = 200, response: Partial<Response> = {}): Response {
+  const actual = realResponse(JSON.stringify(body), ok ? status : status >= 400 ? status : 500, { 'content-type': 'application/json' });
   return {
-    ok,
-    status,
-    json: async () => body,
+    ok: actual.ok,
+    status: actual.status,
+    headers: actual.headers,
+    body: actual.body,
+    text: () => actual.text(),
     ...response,
   } as unknown as Response;
+}
+
+function realResponse(body: string, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(body, { status, headers });
 }
 
 function stubFetch(routes: (url: string) => FetchStub | undefined): void {
@@ -33,18 +40,20 @@ function stubFetch(routes: (url: string) => FetchStub | undefined): void {
 }
 
 function defaultRoutes(url: string): FetchStub | undefined {
-  if (new URL(url).pathname === '/wp-json/') {
+  const parsed = new URL(url);
+  const path = parsed.searchParams.get('rest_route') ?? parsed.pathname;
+  if (path === '/' || path.endsWith('/wp-json/')) {
     return { body: { name: 'Example', description: 'A site' } };
   }
-  if (url.includes('/wp/v2/themes')) {
+  if (path.includes('/wp/v2/themes')) {
     return {
       body: [{ stylesheet: 'twentytwentyfive', template: 'twentytwentyfive', name: { rendered: 'Twenty Twenty-Five' }, version: '1.0', is_block_theme: true }],
     };
   }
-  if (url.includes('/wp/v2/global-styles/themes/')) {
+  if (path.includes('/wp/v2/global-styles/themes/')) {
     return { body: { settings: { color: { palette: [{ slug: 'primary', color: '#0057ff' }] } } } };
   }
-  if (url.includes('/wp/v2/block-types')) {
+  if (path.includes('/wp/v2/block-types')) {
     return {
       body: [
         {
@@ -59,14 +68,14 @@ function defaultRoutes(url: string): FetchStub | undefined {
       ],
     };
   }
-  if (url.includes('/wp/v2/types')) {
+  if (path.includes('/wp/v2/types')) {
     return {
       body: {
         post: { name: 'Posts', viewable: true, hierarchical: false, supports: { title: true, editor: true }, taxonomies: ['category'] },
       },
     };
   }
-  if (url.includes('/wp/v2/block-patterns/patterns')) {
+  if (path.includes('/wp/v2/block-patterns/patterns')) {
     return {
       body: [
         { name: 'core/hero', title: 'Hero', categories: ['featured'], block_types: ['core/post-content'], post_types: [] },
@@ -176,6 +185,68 @@ describe('REST collector', () => {
     expect(String(typesCall?.[0])).not.toContain('_fields=');
   });
 
+  it('uses authenticated post-type edit context and never infers public from viewable', async () => {
+    stubFetch(defaultRoutes);
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
+
+    expect(context.contentModel?.postTypes[0]?.public).toBeUndefined();
+    const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const typesCall = calls.find(([url]) => String(url).includes('/wp/v2/types'));
+    expect(String(typesCall?.[0])).toContain('context=edit');
+  });
+
+  it('retries authenticated post types in view context after an edit-context denial', async () => {
+    let editAttempts = 0;
+    stubFetch((url) => {
+      if (url.includes('/wp/v2/types') && new URL(url).searchParams.get('context') === 'edit') {
+        editAttempts += 1;
+        return { body: {}, ok: false, status: 403 };
+      }
+      return defaultRoutes(url);
+    });
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', wpUser: 'u', wpAppPassword: 'p' });
+
+    expect(editAttempts).toBe(1);
+    expect(context.contentModel?.postTypes[0]).toMatchObject({ name: 'post', showInRest: true });
+    expect(context.contentModel?.postTypes[0]?.public).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'contentModel.rest_edit_context_unavailable', coverage: 'partial' }));
+  });
+
+  it('omits unknown optional block and post-type metadata without fabricating empty evidence', async () => {
+    stubFetch((url) => {
+      if (url.includes('/wp/v2/block-types')) return { body: [{ name: 'core/paragraph', attributes: {}, supports: {} }] };
+      if (url.includes('/wp/v2/types')) return { body: { post: { name: 'Posts' } } };
+      return defaultRoutes(url);
+    });
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+    const block = context.blocks?.types[0];
+    const postType = context.contentModel?.postTypes[0];
+
+    expect(block).toMatchObject({ name: 'core/paragraph', attributes: {}, supports: {} });
+    expect(block?.styles).toBeUndefined();
+    expect(block?.assets).toBeUndefined();
+    expect(block?.render).toBeUndefined();
+    expect(postType?.hierarchical).toBeUndefined();
+    expect(postType?.supports).toBeUndefined();
+    expect(postType?.taxonomies).toEqual([]); // schema materializes only its documented default.
+  });
+
+  it('accepts WordPress empty-array transport values at known dictionary boundaries', async () => {
+    stubFetch((url) => {
+      if (url.includes('/wp/v2/block-types')) return { body: [{ name: 'core/paragraph', attributes: [], supports: [], provides_context: [] }] };
+      if (url.includes('/wp/v2/types')) return { body: { post: { name: 'Posts', supports: [] } } };
+      return defaultRoutes(url);
+    });
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.blocks?.types[0]).toMatchObject({ attributes: {}, supports: {}, providesContext: {} });
+    expect(context.contentModel?.postTypes[0]?.supports).toEqual({});
+  });
+
   it('authenticates and requests the edit context when credentials are supplied', async () => {
     stubFetch(defaultRoutes);
 
@@ -241,6 +312,55 @@ describe('REST collector', () => {
     }));
   });
 
+  it.each([
+    { blocks: [{ name: 'core/paragraph', attributes: 42, supports: {} }] },
+    { blocks: [{ name: 'core/paragraph', attributes: {}, supports: {} }, { name: 'core/paragraph', attributes: {}, supports: {} }] },
+  ])('discards only malformed block evidence', async ({ blocks }) => {
+    stubFetch((url) => url.includes('/wp/v2/block-types') ? { body: blocks } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.blocks).toBeUndefined();
+    expect(context.theme?.stylesheet).toBe('twentytwentyfive');
+    expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'blocks.rest_unavailable', reason: 'malformed_response' }));
+  });
+
+  it('discards blocks when present optional style evidence is malformed', async () => {
+    stubFetch((url) => url.includes('/wp/v2/block-types')
+      ? { body: [{ name: 'core/paragraph', attributes: {}, supports: {}, styles: 42 }] }
+      : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.blocks).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'blocks.rest_unavailable', reason: 'malformed_response' }));
+  });
+
+  it('discards content-model evidence when one mapped type record is malformed', async () => {
+    stubFetch((url) => url.includes('/wp/v2/types') ? { body: { post: null } } : defaultRoutes(url));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test' });
+
+    expect(context.contentModel).toBeUndefined();
+    expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'contentModel.rest_unavailable', reason: 'malformed_response' }));
+  });
+
+  it('rejects a collection where every successful endpoint returned JSON null', async () => {
+    stubFetch(() => ({ body: null }));
+
+    await expect(collect({ collector: 'rest', wpUrl: 'https://example.test' })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT', reason: 'malformed_response',
+    });
+  });
+
+  it('rejects non-null primitive responses when no slice can validate them', async () => {
+    stubFetch(() => ({ body: 42 }));
+
+    await expect(collect({ collector: 'rest', wpUrl: 'https://example.test' })).rejects.toMatchObject({
+      code: 'WESPER_TRANSPORT', reason: 'malformed_response',
+    });
+  });
+
   it.each([null, []])('classifies an empty active-theme response %j as malformed evidence', async (body) => {
     stubFetch((url) => url.includes('/wp/v2/themes') ? { body } : defaultRoutes(url));
 
@@ -280,12 +400,12 @@ describe('REST collector', () => {
       const route = defaultRoutes(String(input));
       if (!route) return Promise.reject(new Error(`unexpected fetch: ${input}`));
       if (String(input).includes('/wp/v2/block-types')) {
-        return Promise.resolve({ ok: true, status: 200, headers: { get: () => '11' }, body: { cancel }, json: async () => route.body } as unknown as Response);
+        return Promise.resolve({ ok: true, status: 200, headers: { get: () => '501' }, body: { cancel } } as unknown as Response);
       }
       return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200));
     }));
 
-    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 10 });
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 500 });
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'blocks.rest_unavailable', reason: 'response_too_large' }));
@@ -299,8 +419,8 @@ describe('REST collector', () => {
       if (String(input).includes('/wp/v2/block-types')) {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
-            controller.enqueue(new TextEncoder().encode('[{"name":'));
-            controller.enqueue(new TextEncoder().encode('"core/paragraph"}]'));
+            controller.enqueue(new TextEncoder().encode('['));
+            controller.enqueue(new TextEncoder().encode(`"${'x'.repeat(500)}"]`));
           },
           cancel,
         });
@@ -309,7 +429,7 @@ describe('REST collector', () => {
       return Promise.resolve(jsonResponse(route.body, route.ok ?? true, route.status ?? 200));
     }));
 
-    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 10 });
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test', maxResponseBytes: 500 });
 
     expect(cancel).toHaveBeenCalledOnce();
     expect(context.warnings).toContainEqual(expect.objectContaining({ code: 'blocks.rest_unavailable', reason: 'response_too_large' }));
@@ -427,6 +547,62 @@ describe('REST collector', () => {
     const context = await collect({ collector: 'rest', wpUrl: 'http://localhost:8080', wpUser: 'u', wpAppPassword: 'p' });
 
     expect(context.provenance.collector).toBe('rest');
+  });
+
+  it('allows authenticated HTTP collection against IPv6 loopback', async () => {
+    stubFetch(defaultRoutes);
+
+    const context = await collect({ collector: 'rest', wpUrl: 'http://[::1]:8080', wpUser: 'u', wpAppPassword: 'p' });
+
+    expect(context.provenance.collector).toBe('rest');
+  });
+
+  it.each([
+    ['https://example.test/wp-json/', 'https://example.test'],
+    ['https://example.test/subdir/#ignored', 'https://example.test/subdir'],
+    ['https://example.test/?rest_route=/', 'https://example.test'],
+  ])('accepts REST URL forms and records a query-free site provenance URL', async (wpUrl, expectedSite) => {
+    stubFetch(defaultRoutes);
+
+    const context = await collect({ collector: 'rest', wpUrl });
+
+    expect(context.site.url).toBe(expectedSite);
+  });
+
+  it('falls back to same-origin rest_route requests after a pretty permalink 404', async () => {
+    let prettyRequests = 0;
+    let routeFallbacks = 0;
+    stubFetch((url) => {
+      const parsed = new URL(url);
+      if (parsed.searchParams.has('rest_route')) { routeFallbacks += 1; return defaultRoutes(`https://example.test/wp-json/${parsed.searchParams.get('rest_route')?.replace(/^\//, '')}`); }
+      if (parsed.pathname.includes('/wp-json/')) { prettyRequests += 1; return { body: {}, ok: false, status: 404 }; }
+      return defaultRoutes(url);
+    });
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test/subdir' });
+
+    expect(prettyRequests).toBe(6);
+    expect(routeFallbacks).toBe(6);
+    expect(context.blocks?.types).toHaveLength(2);
+    expect(context.provenance.collectionMetrics?.requests).toBe(12);
+  });
+
+  it('falls back to same-origin rest_route requests when a plain permalink returns HTML', async () => {
+    let routeFallbacks = 0;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL) => {
+      const parsed = new URL(String(input));
+      if (parsed.searchParams.has('rest_route')) {
+        routeFallbacks += 1;
+        return Promise.resolve(jsonResponse(defaultRoutes(`https://example.test/wp-json/${parsed.searchParams.get('rest_route')?.replace(/^\//, '')}`)?.body));
+      }
+      return Promise.resolve(realResponse('<html><body>front page</body></html>', 200, { 'content-type': 'text/html' }));
+    }));
+
+    const context = await collect({ collector: 'rest', wpUrl: 'https://example.test/subdir' });
+
+    expect(routeFallbacks).toBe(6);
+    expect(context.blocks?.types).toHaveLength(2);
+    expect(context.provenance.collectionMetrics?.requests).toBe(12);
   });
 
   it('redacts secrets from collected settings', async () => {
