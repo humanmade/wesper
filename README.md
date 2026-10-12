@@ -210,7 +210,7 @@ The comparison uses synthetic fixtures and the published `block-runner@0.8.0` pa
 
 ## Versions and contribution
 
-This guide describes Wesper 0.4.1, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.4.1 adds package attribution, taxonomy records and collection fixes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
+This guide describes Wesper 0.5.0, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.5.0 updates dependencies and requires Node.js 22.12 or later. Validation now requires seconds in `provenance.collectedAt` timestamps, such as `2026-10-12T09:00:00Z`; collector-generated timestamps already include seconds. Version 0.4.1 added package attribution, taxonomy records and collection fixes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
 
 Wesper requires Node.js 22.12 or later, builds for Node 22, and CI checks Node 22 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
 
