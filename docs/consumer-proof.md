@@ -13,6 +13,8 @@ npm run example:consumer-proof
 
 The command builds this checkout, packs it, installs the tarball together with `block-runner@0.8.0` in a temporary consumer project, and invokes the installed public APIs. It does not load Wesper source files into the consumer or use a sibling Block Runner checkout. It uses synthetic data and makes no WordPress or model requests.
 
+The temporary project overrides `@wordpress/private-apis` to `2.0.0` so Gutenberg packages share one lock/unlock registry. Block Runner 0.8.0's dependency ranges otherwise resolve separate 1.x and 2.x copies and fail during headless boot. This override applies only to the proof setup; it is not a Wesper runtime dependency or evidence that an unmodified Block Runner install boots successfully.
+
 The printed result identifies `build/consumer-proof/<run-id>/evidence.json`. Each run retains its candidate tarball, manifest, consumer result, canonicalisation receipts and baseline/full/focused output. The tarball checksum identifies the tested bytes; the source commit and dirty flag distinguish a committed build from a working-tree candidate. Generated artifacts are ignored by Git.
 
 ## Fixed comparison
