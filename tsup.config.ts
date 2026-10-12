@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: false,
   splitting: false,
-  target: 'node20',
+  target: 'node22',
 });

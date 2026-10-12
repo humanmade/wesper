@@ -30,7 +30,12 @@ try {
   const candidateDirty = (await run('git', ['status', '--porcelain'], root)).stdout.trim().length > 0;
   temp = join(tmpdir(), `wesper-consumer-proof-${randomUUID()}`);
   mkdirSync(temp, { recursive: true });
-  await run('npm', ['init', '--yes'], temp);
+  // Block Runner's Gutenberg ranges now resolve both private-apis 1.x and 2.x.
+  // Its lock/unlock state must share one module instance across the fixture.
+  writeFileSync(join(temp, 'package.json'), JSON.stringify({
+    private: true,
+    overrides: { '@wordpress/private-apis': '2.0.0' },
+  }));
   await run('npm', ['install', '--ignore-scripts', '--no-save', '--no-audit', '--no-fund', tarball, 'block-runner@0.8.0'], temp, installEnv);
   const installedWesper = JSON.parse(readFileSync(join(temp, 'node_modules', 'wesper', 'package.json'), 'utf8'));
   const installedBlockRunner = JSON.parse(readFileSync(join(temp, 'node_modules', 'block-runner', 'package.json'), 'utf8'));
