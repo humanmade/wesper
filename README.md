@@ -6,7 +6,7 @@ The output, `site.context.json`, records what was collected and where informatio
 
 ## Try it without WordPress
 
-Use Node.js 20 or later. From an empty directory:
+Use Node.js 22.12 or later. From an empty directory:
 
 ```sh
 npm init -y
@@ -212,7 +212,7 @@ The comparison uses synthetic fixtures and the published `block-runner@0.8.0` pa
 
 This guide describes Wesper 0.4.1, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.4.1 adds package attribution, taxonomy records and collection fixes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
 
-Wesper requires Node.js 20 or later, builds for Node 20, and CI checks Node 20 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
+Wesper requires Node.js 22.12 or later, builds for Node 22, and CI checks Node 22 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
 
 For the collection flow, source-file map and a worked field-change walkthrough, read [How Wesper works](https://github.com/humanmade/wesper/blob/main/docs/architecture.md).
 

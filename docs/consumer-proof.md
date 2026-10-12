@@ -4,7 +4,7 @@ This comparison feeds a validated Wesper manifest into two consumers. It checks 
 
 ## Run
 
-Use Node.js 20 or later and npm registry access:
+Use Node.js 22.12 or later and npm registry access:
 
 ```sh
 npm ci

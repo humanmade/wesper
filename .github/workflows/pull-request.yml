@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 24]
+        node: [22, 24]
 
     steps:
       - name: Checkout
@@ -73,7 +73,7 @@ jobs:
       matrix:
         include:
           # Block Bindings arrived in 6.5; 7.1 exercises a later core API boundary.
-          - node: 20
+          - node: 22
             wordpress: 6.5.5
           - node: 24
             wordpress: 7.1.0

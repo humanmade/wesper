@@ -1,6 +1,6 @@
 # Contributing
 
-Use Node.js 20 or later. Wesper targets Node 20, and CI runs the package checks on Node 20 and 24.
+Use Node.js 22.12 or later. Wesper targets Node 22, and CI runs the package checks on Node 22 and 24.
 
 ```sh
 npm ci
@@ -30,7 +30,7 @@ WORDPRESS_VERSION=6.5.5 npm run test:integration
 WORDPRESS_VERSION=7.1.0 npm run test:integration
 ```
 
-Run these sequentially when using the default port. The runner creates its own Compose project and checks that collection leaves the fixture's content, meta and registrations unchanged. CI pairs WordPress 6.5.5 with Node 20 and WordPress 7.1.0 with Node 24.
+Run these sequentially when using the default port. The runner creates its own Compose project and checks that collection leaves the fixture's content, meta and registrations unchanged. CI pairs WordPress 6.5.5 with Node 22 and WordPress 7.1.0 with Node 24.
 
 ## Keep verification focused
 
