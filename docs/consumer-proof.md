@@ -11,9 +11,7 @@ npm ci
 npm run example:consumer-proof
 ```
 
-The command builds this checkout, packs it, installs the tarball together with `block-runner@0.8.0` in a temporary consumer project, and invokes the installed public APIs. It does not load Wesper source files into the consumer or use a sibling Block Runner checkout. It uses synthetic data and makes no WordPress or model requests.
-
-The temporary project overrides `@wordpress/private-apis` to `2.0.0` so Gutenberg packages share one lock/unlock registry. Block Runner 0.8.0's dependency ranges otherwise resolve separate 1.x and 2.x copies and fail during headless boot. This override applies only to the proof setup; it is not a Wesper runtime dependency or evidence that an unmodified Block Runner install boots successfully.
+The command builds this checkout, packs it, installs the tarball together with `block-runner@1.0.0` in a temporary consumer project, and invokes the installed public APIs. It does not load Wesper source files into the consumer or use a sibling Block Runner checkout. It uses synthetic data and makes no WordPress or model requests.
 
 The printed result identifies `build/consumer-proof/<run-id>/evidence.json`. Each run retains its candidate tarball, manifest, consumer result, canonicalisation receipts and baseline/full/focused output. The tarball checksum identifies the tested bytes; the source commit and dirty flag distinguish a committed build from a working-tree candidate. Generated artifacts are ignored by Git.
 
@@ -52,7 +50,7 @@ The fixture's placeholder hash is replaced with a hash of its validated document
 
 The adapter reads the collected preset registry instead of issuing WordPress discovery requests or parsing `theme.settings` again. The independent consumer uses reported references and field arguments instead of reconstructing preset strings or guessing source-specific argument keys.
 
-No discovery code is deleted from Block Runner by this example. The pinned Block Runner 0.8.0 `--context` resolver reads `theme.settings`; it is not the entry point used here. The explicit public configuration adapter demonstrates consumption of Wesper's native preset list without claiming the built-in resolver has been migrated.
+No discovery code is deleted from Block Runner by this example. The pinned Block Runner 1.0.0 `--context` resolver reads `theme.settings`; it is not the entry point used here. The explicit public configuration adapter demonstrates consumption of Wesper's native preset list without claiming the built-in resolver has been migrated.
 
 ## Interpretation and limits
 
