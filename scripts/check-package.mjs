@@ -22,7 +22,14 @@ try {
   const actual = new Set(packed[0].files.map((file) => file.path));
   const allowed = new Set([
     'LICENSE', 'README.md', 'package.json',
-    'dist/cli.js', 'dist/index.js', 'dist/cli.d.ts', 'dist/index.d.ts',
+    'dist/cli.js', 'dist/index.js',
+    'dist/canonical.d.ts', 'dist/cli.d.ts', 'dist/collector/control.d.ts',
+    'dist/collector/normalize.d.ts', 'dist/collector/rest.d.ts', 'dist/collector/safe.d.ts',
+    'dist/collector/wpcli.d.ts', 'dist/compatibility.d.ts', 'dist/consumer.d.ts',
+    'dist/evidence.d.ts', 'dist/index.d.ts', 'dist/redact.d.ts',
+    'dist/schema.d.ts', 'dist/serialize.d.ts', 'dist/summary.d.ts',
+    'dist/theme.d.ts', 'dist/types.d.ts', 'dist/version.d.ts',
+    'dist/warnings.d.ts',
     'schemas/site-context-v1.schema.json',
     'examples/consumer-helpers.mjs', 'examples/consumer-proof.mjs', 'examples/fixtures/consumer-manifest.json',
   ]);
@@ -37,6 +44,12 @@ try {
     cwd: scratch,
     env: npmEnv,
   });
+  await writeFile(path.join(scratch, 'consumer.mts'), `import { validate, type ValidationResult } from 'wesper';
+const result: ValidationResult = validate({});
+`);
+  await execFileAsync(path.join(root, 'node_modules', '.bin', 'tsc'), [
+    '--noEmit', '--strict', '--module', 'NodeNext', '--target', 'ES2022', 'consumer.mts',
+  ], { cwd: scratch });
   await writeFile(path.join(scratch, 'verify.mjs'), `
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
