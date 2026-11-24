@@ -1,6 +1,6 @@
 {
   "name": "wesper",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Read a WordPress site's capabilities, presentation system, extensions, content model, authoring environment, and media rules into one provenanced context manifest.",
   "type": "module",
   "license": "GPL-2.0-or-later",
@@ -50,7 +50,7 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "build": "npm run generate:schema && node scripts/clean-dist.mjs && tsup",
+    "build": "npm run generate:schema && node scripts/clean-dist.mjs && tsup && tsc -p tsconfig.build.json",
     "check:package": "node scripts/check-package.mjs",
     "clean": "node scripts/clean-dist.mjs",
     "dev": "tsx src/cli.ts",
@@ -64,14 +64,14 @@
     "verify": "npm run typecheck && npm test && npm run build && npm run check:package"
   },
   "dependencies": {
-    "commander": "^15.0.0",
-    "zod": "^4.6.6"
+    "commander": "^15.1.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
-    "tsup": "^8.5.1",
+    "@types/node": "^26.6.6",
+    "tsup": "^9.0.0",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3",
-    "vitest": "^5.0.3"
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
   }
 }

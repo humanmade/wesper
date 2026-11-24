@@ -30,17 +30,12 @@ try {
   const candidateDirty = (await run('git', ['status', '--porcelain'], root)).stdout.trim().length > 0;
   temp = join(tmpdir(), `wesper-consumer-proof-${randomUUID()}`);
   mkdirSync(temp, { recursive: true });
-  // Block Runner's Gutenberg ranges now resolve both private-apis 1.x and 2.x.
-  // Its lock/unlock state must share one module instance across the fixture.
-  writeFileSync(join(temp, 'package.json'), JSON.stringify({
-    private: true,
-    overrides: { '@wordpress/private-apis': '2.0.0' },
-  }));
-  await run('npm', ['install', '--ignore-scripts', '--no-save', '--no-audit', '--no-fund', tarball, 'block-runner@0.8.0'], temp, installEnv);
+  writeFileSync(join(temp, 'package.json'), JSON.stringify({ private: true }));
+  await run('npm', ['install', '--ignore-scripts', '--no-save', '--no-audit', '--no-fund', tarball, 'block-runner@1.0.0'], temp, installEnv);
   const installedWesper = JSON.parse(readFileSync(join(temp, 'node_modules', 'wesper', 'package.json'), 'utf8'));
   const installedBlockRunner = JSON.parse(readFileSync(join(temp, 'node_modules', 'block-runner', 'package.json'), 'utf8'));
   if (installedWesper.version !== candidate.version) throw new Error(`Installed Wesper ${installedWesper.version} did not resolve candidate ${candidate.version}.`);
-  if (installedBlockRunner.version !== '0.8.0') throw new Error(`Installed Block Runner ${installedBlockRunner.version} did not resolve pinned 0.8.0.`);
+  if (installedBlockRunner.version !== '1.0.0') throw new Error(`Installed Block Runner ${installedBlockRunner.version} did not resolve pinned 1.0.0.`);
 
   const fixture = join(temp, 'consumer-manifest.json');
   copyFileSync(join(temp, 'node_modules', 'wesper', 'examples', 'fixtures', 'consumer-manifest.json'), fixture);

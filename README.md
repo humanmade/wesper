@@ -206,11 +206,11 @@ node examples/consumer-helpers.mjs
 
 Run `npm run example:consumer-proof` from a checkout to build and install the candidate in a clean consumer project, then compare fixed Block Runner inputs with no site tokens, full context and focused context. A separate Node example checks native references and field bindings through the installed Wesper API.
 
-The comparison uses synthetic fixtures and the published `block-runner@0.8.0` package. It records emitted native references, retained intentional literals, validity and context size. See [the reproducible setup and its limits](https://github.com/humanmade/wesper/blob/main/docs/consumer-proof.md). The proof runner is repository tooling; Block Runner is not a Wesper runtime dependency.
+The comparison uses synthetic fixtures and the published `block-runner@1.0.0` package. It records emitted native references, retained intentional literals, validity and context size. See [the reproducible setup and its limits](https://github.com/humanmade/wesper/blob/main/docs/consumer-proof.md). The proof runner is repository tooling; Block Runner is not a Wesper runtime dependency.
 
 ## Versions and contribution
 
-This guide describes Wesper 0.5.0, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.5.0 updates dependencies and requires Node.js 22.12 or later. Validation now requires seconds in `provenance.collectedAt` timestamps, such as `2026-10-12T09:00:00Z`; collector-generated timestamps already include seconds. Version 0.4.1 added package attribution, taxonomy records and collection fixes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
+This guide describes Wesper 0.5.1, with collector semantics 0.2.3 and manifest `contextVersion: 1`. Version 0.5.1 refreshes runtime and build dependencies. Version 0.5.0 updates dependencies and requires Node.js 22.12 or later. Validation now requires seconds in `provenance.collectedAt` timestamps, such as `2026-10-12T09:00:00Z`; collector-generated timestamps already include seconds. Version 0.4.1 added package attribution, taxonomy records and collection fixes. Native-reference helpers require 0.0.3 or later; block relationships, MU-plugin inventory and post-type capabilities require 0.0.4 or later.
 
 Wesper requires Node.js 22.12 or later, builds for Node 22, and CI checks Node 22 and 24. See [CONTRIBUTING.md](https://github.com/humanmade/wesper/blob/main/CONTRIBUTING.md) for setup and verification.
 
